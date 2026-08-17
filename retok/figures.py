@@ -471,7 +471,7 @@ def plot_mechanism(out_path: Path) -> None:
     ax.text(
         1.15,
         2.62,
-        'store as text  "…= 521"  →  re-encode (BPE longest match)',
+        'store as text  "750 + 860 = 521"  →  re-encode (BPE longest match)',
         fontsize=9.5,
         color=INK,
         va="center",
@@ -488,14 +488,22 @@ def plot_mechanism(out_path: Path) -> None:
     ax.text(
         0.1,
         1.75,
-        "1 decode step — the derivation is gone",
+        "13 positions \u2192 7 — the derivation is gone, and so are the digits",
         fontsize=9.5,
         color=MUTED,
     )
+    # A real encoder runs over the WHOLE stored string, so the operand runs
+    # merge too — not just the span the model generated.
     x = 0.1
-    for t in prompt:
-        w = 0.52 + 0.12 * max(0, len(t) - 1)
-        _token_box(ax, x, 1.1, w, t, MUTED, fontsize=9.5)
+    for t, colour in (
+        ("<bos>", MUTED),
+        ("750", ORANGE),
+        ("+", MUTED),
+        ("860", ORANGE),
+        ("=", MUTED),
+    ):
+        w = 0.52 + 0.16 * max(0, len(t) - 1)
+        _token_box(ax, x, 1.1, w, t, colour, fontsize=9.5)
         x += w + 0.09
     _token_box(ax, x, 1.1, 1.0, "521", ORANGE)
     ax.annotate(

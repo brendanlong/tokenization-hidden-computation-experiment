@@ -27,6 +27,19 @@ and monitoring analysis — and can we demonstrate it cleanly in a controlled
 toy? See [EXPERIMENT_PLAN.md](EXPERIMENT_PLAN.md) for hypothesis and
 pre-registered predictions.
 
+## Release
+
+Published as a standalone public repo on 2026-08-17:
+**https://github.com/brendanlong/tokenization-hidden-computation-experiment**
+(flattened layout — `retok.*` → `retok.*`, the used subset of
+`shared/` vendored as `common/`; S3 upload and run-name guards stripped).
+
+Artifacts are in the public HF dataset
+[`brendanlong/retok-noncanonical-tokenization`](https://huggingface.co/datasets/brendanlong/retok-noncanonical-tokenization):
+the per-model generation records at the root, and **all 17 checkpoints** under
+`checkpoints/<run_name>/final.pt` — so every `s3://` checkpoint URI below has a
+public equivalent, `hf:checkpoints/<run_name>/final.pt`.
+
 ## Runs
 
 > Each entry MUST record: exact copy-pasted command, model config, batch size,
@@ -94,11 +107,22 @@ as a one-step generation.
   (CoT 95.6%, replay 100%). The deeper 2-step carry into digit 2 is recovered
   better at CoT's dedicated computing-position (**81.8%**) than crammed at the
   single `=` (**68.8%**) — the positional-dedication benefit only shows up for
-  the carry that needs the chain. Takeaway: the information **survives**
-  re-tokenization (carries are operand functions), so this is a
-  positional-structure result, not information loss — we lean on
-  positions-collapse and the calibration detector for the headline, not this
-  probe.
+  the carry that needs the chain. Against a replay that keeps the operands as
+  readable digit tokens, then, the information **survives** re-tokenization
+  (carries are operand functions) and this is a positional-structure result.
+
+  **But that replay is not what a stored transcript becomes** (2026-08-17).
+  A real encoder runs over the whole string, so the operand runs merge too:
+  `<bos> 7 5 0 + 8 6 0 = 5 2 1` re-encodes to `<bos> [750] + [860] = [521]`,
+  13 positions → 7. Probed on *that* sequence the carry signal drops to
+  **66.2%** (digit 1) and **54.5%** (digit 2) against a 50.9% base — near
+  chance. Once the operand digits are no longer individually visible, the
+  information does not survive either. Both are reported: the digit-operand
+  replay isolates *capacity* (can it one-step, given a readable prompt?), the
+  fully re-tokenized one is *what an analyst actually holds*. Caveat: the latter
+  is off-distribution, since merged tokens only follow `=` in training — which
+  is itself the point, a re-tokenized transcript is a sequence the model never
+  emitted and cannot consume.
 
 **Appendix — width sweep (dim 8–64, 2 layers, seed 0, 15M examples).** Locates
 the dim=16 regime and shows CoT tolerates far more width-compression than the
