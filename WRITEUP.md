@@ -248,6 +248,19 @@ whether this stays a validity bug or becomes a channel, and we haven't run it.
   *is* a sequence the model never emitted — but it means the collapse in
   probability and probe accuracy mixes "can't compute it in one step" with
   "can't read this input". The digit-operand control separates the two.
+- **The toy's whole sequence re-tokenizes; a real transcript's does not.** Our
+  prompt is supplied as digit tokens, so re-encoding changes the operands as
+  well as the answer. A real prompt is canonically encoded by construction — it
+  is text run through the tokenizer — so re-encoding a real transcript perturbs
+  only the spans the model itself generated non-canonically. Read the toy's
+  13 → 7 collapse as a clean demonstration of the mechanism, **not** as a
+  magnitude estimate. The magnitude estimate is §2's per-token rates and the
+  decay curve, where damage is local and dies out within ~16 tokens.
+- Nothing here is **information loss**. The merged tokens are a bijection, so
+  the re-tokenized IDs still determine the operands and every carry exactly. The
+  claim is that a probe on the stored transcript reads near-chance for something
+  the model provably computed — a false negative in the analysis, not a fact
+  that has gone missing.
 - **Small N is the main statistical weakness.** Small open models (≤20B), a few
   hundred generations per cell, one seed, short completions. The confident-flip
   rate rests on a handful of events; we give raw counts and Wilson intervals

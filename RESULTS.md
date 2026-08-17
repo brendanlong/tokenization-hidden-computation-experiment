@@ -116,8 +116,19 @@ as a one-step generation.
   `<bos> 7 5 0 + 8 6 0 = 5 2 1` re-encodes to `<bos> [750] + [860] = [521]`,
   13 positions → 7. Probed on *that* sequence the carry signal drops to
   **66.2%** (digit 1) and **54.5%** (digit 2) against a 50.9% base — near
-  chance. Once the operand digits are no longer individually visible, the
-  information does not survive either. Both are reported: the digit-operand
+  chance.
+
+  **This is not information loss, and calling it that would be wrong.** The
+  merged tokens are a *bijection* on 0..999, so `[750]` and `[860]` still
+  determine the operands exactly and every carry is recoverable from the
+  re-tokenized token IDs with no model involved at all. What breaks is that
+  **this model's residual stream no longer linearly encodes the carry** at those
+  positions — it never learned to unpack a merged operand token, having only
+  ever seen merged tokens after `=`. That is an interpretability-validity
+  result, which is the claim we actually want: a probe run on the stored
+  transcript reports near-chance for a carry the model demonstrably computed.
+  A false negative, not a vanished fact. Both replays are reported: the
+  digit-operand
   replay isolates *capacity* (can it one-step, given a readable prompt?), the
   fully re-tokenized one is *what an analyst actually holds*. Caveat: the latter
   is off-distribution, since merged tokens only follow `=` in training — which
