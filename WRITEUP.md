@@ -248,14 +248,18 @@ whether this stays a validity bug or becomes a channel, and we haven't run it.
   *is* a sequence the model never emitted — but it means the collapse in
   probability and probe accuracy mixes "can't compute it in one step" with
   "can't read this input". The digit-operand control separates the two.
-- **The toy's whole sequence re-tokenizes; a real transcript's does not.** Our
-  prompt is supplied as digit tokens, so re-encoding changes the operands as
-  well as the answer. A real prompt is canonically encoded by construction — it
-  is text run through the tokenizer — so re-encoding a real transcript perturbs
-  only the spans the model itself generated non-canonically. Read the toy's
-  13 → 7 collapse as a clean demonstration of the mechanism, **not** as a
-  magnitude estimate. The magnitude estimate is §2's per-token rates and the
-  decay curve, where damage is local and dies out within ~16 tokens.
+- The toy's **whole sequence** re-tokenizes, operands included. What decides
+  this is not prompt-vs-completion but *which spans the model wrote*: a CoT
+  scratchpad routinely restates its inputs before working on them, so asked
+  "what is 57 + 68?" a model can emit the entire `7 5 0 + 8 6 0 = 5 2 1` itself,
+  and all of it then re-encodes. Whether our operands are formally prompt or
+  completion changes nothing in the measurement — the residual stream is
+  identical either way — so read the 13 → 7 collapse as realistic for a
+  scratchpad rather than as an artifact of the toy's layout. What it is *not* is
+  a magnitude estimate: the collapse requires those digits to have been written
+  non-canonically in the first place, and §2's per-token rates and the decay
+  curve are the estimate of how often that happens and how far the damage
+  travels.
 - Nothing here is **information loss**. The merged tokens are a bijection, so
   the re-tokenized IDs still determine the operands and every carry exactly. The
   claim is that a probe on the stored transcript reads near-chance for something
