@@ -19,7 +19,7 @@ Given a trained checkpoint, computes:
 
 Run:
     uv run python -m retok.analysis \
-        --checkpoint hf:checkpoints/retok-main-s0/final.pt \
+        --checkpoint s3://brendanlong-experiments/retok/checkpoints/<run>/final.pt \
         --out data/retok/analysis
 """
 
@@ -38,7 +38,9 @@ from common.gpu import resolve_device
 from retok.data import (
     FMT_COT,
     FMT_DIRECT,
+    canonical_replay_len,
     compute_arithmetic,
+    encode_canonical_replay,
     encode_eval_batch,
     make_eval_buckets,
 )
@@ -98,10 +100,15 @@ class CarryProbeResult:
     cot_carry_acc: list[list[float]]
     # replay: probe the single merged answer position for carry_in[i]
     replay_carry_acc: list[list[float]]  # [layer][digit i]
-    # majority-class baseline per digit position (carry base rate)
     carry_base_rate: list[float]
+    # fully re-tokenized transcript: merged operands AND merged answer, probed
+    # at its single answer-predicting position
+    retok_carry_acc: list[list[float]]  # [layer][digit i]
+    # majority-class baseline per digit position (carry base rate)
     cot_positions: int  # = n_digits (per-digit answer positions)
     replay_positions: int  # = 1 (merged answer collapses the span)
+    cot_total_positions: int  # whole stream, as emitted
+    retok_total_positions: int  # whole stream, re-encoded end to end
 
 
 def probe_carry_recovery(
@@ -168,14 +175,33 @@ def probe_carry_recovery(
             ]
         )
 
+    # --- fully re-tokenized transcript: what storing-as-text actually yields.
+    # A real encoder runs over the whole string, so the operand runs merge too.
+    # Off-distribution by construction (merged tokens only follow "=" in
+    # training) — which is the point: this sequence was never emitted.
+    retok_ids = encode_canonical_replay(tok, pairs)
+    retok_eq = canonical_replay_len(n_digits) - 3  # bos [a] + [b] = -> "=" index
+    retok_resid = _residuals_at(model, retok_ids, [retok_eq], device)
+    retok_acc: list[list[float]] = []
+    for layer_resid in retok_resid:  # (B, 1, dim)
+        retok_acc.append(
+            [
+                _probe_accuracy(layer_resid[:, 0, :], carries[:, i])
+                for i in range(n_digits)
+            ]
+        )
+
     return CarryProbeResult(
         n_digits=n_digits,
         n_layers=len(cot_resid),
         cot_carry_acc=cot_acc,
         replay_carry_acc=replay_acc,
+        retok_carry_acc=retok_acc,
         carry_base_rate=base_rate,
         cot_positions=n_digits,
         replay_positions=1,
+        cot_total_positions=int((cot_batch["input_ids"][0] != tok.pad_id).sum()),
+        retok_total_positions=retok_ids.shape[1],
     )
 
 
@@ -188,11 +214,50 @@ class CalibrationResult:
     per_chain_cot_acc: dict[int, float]
     retok_transcript_accuracy: float  # correct CoT transcripts re-tokenized => 1.0
     mean_direct_p_correct: float
+    # same quantity read off the FULLY re-tokenized transcript (merged operands
+    # too), i.e. what an analyst actually holds after a text round trip
+    mean_retok_p_correct: float
     # neg-log-likelihood of observing all-correct under the one-step model
     implied_nll_of_observed: float
 
 
-def calibration_gap(eval_metrics: dict[str, float], n_digits: int) -> CalibrationResult:
+@torch.no_grad()
+def retok_prompt_p_correct(
+    model: RetokTransformer,
+    tok: RetokTokenizer,
+    pairs: list[tuple[int, int]],
+    device: torch.device,
+    *,
+    batch_size: int = 1000,
+) -> float:
+    """Mean P(correct merged answer) given the *fully* re-tokenized prompt.
+
+    The direct-format number keeps the operands as readable digit tokens, so it
+    answers "could the model have done this in one step?" — a capacity question.
+    This one conditions on what a stored-then-re-encoded transcript actually
+    contains (``<bos> [750] + [860] =``), which is strictly less informative:
+    the operand digits are no longer individually visible, and merged tokens
+    never appear before ``=`` in training. It is the right probability for the
+    detector, since that is the sequence an analyst is holding.
+    """
+    model.eval()
+    ids = encode_canonical_replay(tok, pairs).to(device)
+    eq = canonical_replay_len(tok.n_digits) - 3
+    gold = torch.tensor([tok.merged_token(a + b) for a, b in pairs], device=device)
+    total = torch.zeros((), device=device, dtype=torch.float64)
+    for i in range(0, ids.shape[0], batch_size):
+        logits = model(ids[i : i + batch_size, : eq + 1])[:, -1, :]
+        probs = torch.softmax(logits.float(), dim=-1)
+        chunk_gold = gold[i : i + batch_size]
+        total += probs[
+            torch.arange(chunk_gold.shape[0], device=device), chunk_gold
+        ].sum()
+    return float(total / ids.shape[0])
+
+
+def calibration_gap(
+    eval_metrics: dict[str, float], n_digits: int, retok_p_correct: float
+) -> CalibrationResult:
     """Turn the training eval metrics into the calibration-gap detector.
 
     A re-tokenized correct CoT transcript is, by construction, the correct
@@ -221,6 +286,7 @@ def calibration_gap(eval_metrics: dict[str, float], n_digits: int) -> Calibratio
         per_chain_cot_acc=cot_acc,
         retok_transcript_accuracy=1.0,
         mean_direct_p_correct=mean_p,
+        mean_retok_p_correct=retok_p_correct,
         implied_nll_of_observed=nll,
     )
 
@@ -254,10 +320,12 @@ def run_analysis(
         eval_batch_size=1000,
         autocast_ctx=nullcontext(),
     )
-    calib = calibration_gap(eval_metrics, n_digits)
-
     # Probe on the hardest bucket (longest carry chain) pooled with all buckets
     all_pairs = [p for pairs in buckets.values() for p in pairs]
+
+    calib = calibration_gap(
+        eval_metrics, n_digits, retok_prompt_p_correct(model, tok, all_pairs, device)
+    )
     probe = probe_carry_recovery(model, tok, all_pairs, device)
 
     results: dict[str, object] = {
@@ -279,8 +347,13 @@ def run_analysis(
             f"direct P(correct)={calib.per_chain_direct_p_correct[c]:.3f}"
         )
     print("\n=== Serial-depth / compute accounting ===")
-    print(f"  real CoT answer positions:  {probe.cot_positions}")
-    print(f"  canonical replay positions: {probe.replay_positions}")
+    print(f"  real CoT answer positions:      {probe.cot_positions}")
+    print(f"  answer positions after re-encode: {probe.replay_positions}")
+    print(
+        f"  whole transcript: {probe.cot_total_positions} positions emitted -> "
+        f"{probe.retok_total_positions} after re-encoding "
+        "(a real encoder merges the operands too)"
+    )
     print("\n=== Carry probe (best layer, per digit) — real CoT vs replay ===")
     best_cot = [
         max(probe.cot_carry_acc[L][i] for L in range(probe.n_layers))
@@ -290,13 +363,24 @@ def run_analysis(
         max(probe.replay_carry_acc[L][i] for L in range(probe.n_layers))
         for i in range(n_digits)
     ]
+    best_retok = [
+        max(probe.retok_carry_acc[L][i] for L in range(probe.n_layers))
+        for i in range(n_digits)
+    ]
+    print("  (digit-operand replay keeps the operands readable; the fully")
+    print("   re-tokenized one is what a stored transcript actually becomes)")
     for i in range(n_digits):
         print(
-            f"  carry into digit {i}: CoT position={best_cot[i]:.1%}  "
-            f"replay(single = position)={best_replay[i]:.1%}  "
+            f"  carry into digit {i}: CoT={best_cot[i]:.1%}  "
+            f"digit-operand replay={best_replay[i]:.1%}  "
+            f"fully re-tokenized={best_retok[i]:.1%}  "
             f"base={probe.carry_base_rate[i]:.1%}"
         )
     print("\n=== Calibration gap ===")
+    print(
+        f"  mean P(correct | fully re-tokenized prompt): "
+        f"{calib.mean_retok_p_correct:.5f}"
+    )
     print(f"  mean direct P(correct): {calib.mean_direct_p_correct:.3f}")
     print(f"  re-tokenized transcript accuracy: {calib.retok_transcript_accuracy:.0%}")
     return results

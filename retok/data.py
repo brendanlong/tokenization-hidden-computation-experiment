@@ -332,6 +332,43 @@ def make_eval_buckets(
     return buckets
 
 
+def canonical_replay_len(n_digits: int) -> int:
+    """Length of the fully re-tokenized transcript: bos, [a], +, [b], =, [s], eos."""
+    return 7
+
+
+def encode_canonical_replay(
+    tok: RetokTokenizer, pairs: list[tuple[int, int]]
+) -> Tensor:
+    """The stored transcript as a real encoder would re-read it.
+
+    A CoT stream is *text*; storing and re-encoding it runs the tokenizer over
+    the **whole** string, not just the span the model generated. Greedy
+    longest-match therefore merges the operand runs as well as the answer::
+
+        <bos> 7 5 0 + 8 6 0 = 5 2 1 <eos>   ->   <bos> [750] + [860] = [521] <eos>
+
+    This is what :func:`RetokTokenizer.canonicalize` already does; earlier
+    analysis exempted the prompt from it, which was not something a real
+    tokenizer would do. 12 positions collapse to 7.
+
+    Note the replay is **off-distribution**: merged tokens appear only after
+    ``=`` in training, so the model has never read one as an operand. That is
+    not a flaw in the measurement — it is the point. A re-tokenized transcript
+    is a sequence the model never emitted and cannot consume. Where the question
+    is specifically "could the model have done this in one step?", use
+    ``FMT_DIRECT`` instead: it keeps the operands readable and so measures
+    capacity rather than distribution shift.
+    """
+    out = []
+    for a, b in pairs:
+        ids = [
+            t for t in encode_example(tok, a, b, FMT_COT).input_ids if t != tok.pad_id
+        ]
+        out.append(torch.tensor(tok.canonicalize(ids), dtype=torch.long))
+    return torch.stack(out)
+
+
 def encode_eval_batch(
     tok: RetokTokenizer, pairs: list[tuple[int, int]], fmt: int
 ) -> dict[str, Tensor]:

@@ -37,7 +37,8 @@ digit-by-digit (3 tokens), sometimes as a single "merged" answer token.
 | accuracy emitting it as one token, *given it takes that branch* | **1.3%** |
 | how often it *prefers* the one-token form (full-vocab argmax) | **0%** |
 | probability it assigns the correct one-token answer | **0.003** |
-| decode positions: actual → re-tokenized | **3 → 1** |
+| decode positions: actual → re-tokenized | **3 → 1** (whole transcript 13 → 7) |
+| probability of the answer given the *re-tokenized* transcript | **0.0003** |
 
 <sub>The two middle rows are conditioned differently, which is worth stating
 because they look inconsistent otherwise. The 1.3% is an argmax *restricted to
@@ -241,17 +242,12 @@ whether this stays a validity bug or becomes a channel, and we haven't run it.
 
 - The toy's magnitude is **constructed by design** — we chose the vocabulary and
   the width. It demonstrates the mechanism, not a deployment rate.
-- **The toy's own prompt is non-canonical.** Operands are supplied as individual
-  digit tokens so the model can read the digits it must add — merged operands
-  hide them and the task becomes unlearnable at any depth. But our
-  canonicalization rule merges *any* 3-digit run, so the prompt `750 + 860 =`
-  would itself re-encode to `[750] + [860] =`. The toy therefore models **the
-  generated answer span collapsing**, not the whole transcript round-tripping,
-  and no real encoder would produce its prompt. This does not affect the
-  measurement — both conditions hold the prompt encoding fixed, so the 3→1
-  comparison isolates the answer span — but it is a construction artifact. A
-  cleaner build (2-digit operands with a 3-digit answer, so only answer runs are
-  mergeable) would remove it at the cost of a retrain.
+- The re-tokenized replay is **off-distribution** for the model: merged tokens
+  only ever follow `=` in training, so it has never read one as an operand. We
+  take that to be the point rather than a confound — a re-tokenized transcript
+  *is* a sequence the model never emitted — but it means the collapse in
+  probability and probe accuracy mixes "can't compute it in one step" with
+  "can't read this input". The digit-operand control separates the two.
 - **Small N is the main statistical weakness.** Small open models (≤20B), a few
   hundred generations per cell, one seed, short completions. The confident-flip
   rate rests on a handful of events; we give raw counts and Wilson intervals
