@@ -423,6 +423,17 @@ def plot_mechanism(out_path: Path) -> None:
     ax.text(
         0.1, 4.85, "What the model ran", fontsize=11.5, color=INK, fontweight="bold"
     )
+    # Without this the digits look like an arithmetic error: everything is
+    # least-significant-digit-first and zero-padded to 3 digits, so 57 + 68 = 125
+    # is written 750 + 860 = 521.
+    ax.text(
+        4.42,
+        4.87,
+        "reversed (LSB-first) convention:  57 + 68 = 125  is written  750 + 860 = 521",
+        fontsize=8.6,
+        color=MUTED,
+        va="center",
+    )
     ax.text(
         0.1,
         4.55,
@@ -430,13 +441,13 @@ def plot_mechanism(out_path: Path) -> None:
         fontsize=9.5,
         color=MUTED,
     )
-    prompt = ["<bos>", "1", "5", "+", "6", "4", "="]
+    prompt = ["<bos>", "7", "5", "0", "+", "8", "6", "0", "="]
     x = 0.1
     for t in prompt:
         w = 0.52 + 0.12 * max(0, len(t) - 1)
         _token_box(ax, x, 3.9, w, t, MUTED, fontsize=9.5)
         x += w + 0.09
-    for t in ["9", "7", "0"]:
+    for t in ["5", "2", "1"]:
         _token_box(ax, x, 3.9, 0.52, t, BLUE)
         x += 0.61
     ax.annotate(
@@ -460,7 +471,7 @@ def plot_mechanism(out_path: Path) -> None:
     ax.text(
         1.15,
         2.62,
-        'store as text  "…= 970"  →  re-encode (BPE longest match)',
+        'store as text  "…= 521"  →  re-encode (BPE longest match)',
         fontsize=9.5,
         color=INK,
         va="center",
@@ -486,7 +497,7 @@ def plot_mechanism(out_path: Path) -> None:
         w = 0.52 + 0.12 * max(0, len(t) - 1)
         _token_box(ax, x, 1.1, w, t, MUTED, fontsize=9.5)
         x += w + 0.09
-    _token_box(ax, x, 1.1, 1.0, "970", ORANGE)
+    _token_box(ax, x, 1.1, 1.0, "521", ORANGE)
     ax.annotate(
         "1 position — same string, different tokens",
         xy=(x + 1.02, 1.31),
