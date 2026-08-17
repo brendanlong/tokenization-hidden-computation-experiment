@@ -66,9 +66,14 @@ repetition_penalty=1.0` — pinned explicitly, not inherited from each repo's
 | `<model>.jsonl` | per-generation records backing the rate table |
 | `induce_<model>.jsonl` | prompted-induction trials + matched controls |
 | `checkpoints/retok-main-s{0,1,2}/final.pt` | the 3 main toy-model seeds (2 layers, dim 16) |
-| `checkpoints/retok-sweep-{cot,1step}-d<N>/final.pt` | width sweep, dim ∈ {8,12,16,24,32,64} |
+| `checkpoints/retok-sweep-cot-d<N>/final.pt` | width sweep, CoT arm, dim ∈ {8,12,24,32,64} |
+| `checkpoints/retok-sweep-1step-d<N>/final.pt` | width sweep, one-step arm, dim ∈ {8,12,16,24,32,64} |
 | `checkpoints/retok-sweep-{1L,2L,4L}/final.pt` | depth sweep |
-| `checkpoints/**/final.pt.json` | per-run metadata sidecar (config + final eval) |
+| `checkpoints/retok-main-s<seed>/final.pt.json` | metadata sidecar (config + final eval) |
+
+17 runs in total. The CoT arm has no `d16` entry because the dim=16 CoT model
+*is* `retok-main-s{0,1,2}` — that is the headline run. Sidecars exist only for
+those three; the sweep runs predate the sidecar.
 
 Checkpoints are `{"step", "model_state_dict", "model_config"}` dicts, loadable
 with `torch.load(..., weights_only=True)`, and resolve by run name from the code:

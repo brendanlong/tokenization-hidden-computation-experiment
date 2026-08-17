@@ -45,7 +45,7 @@ the merged-token subspace* — "if it goes down the one-token branch, does it pi
 the right one?" The 0.003 is *unconditional*, diluted by the ~71% of probability
 mass sitting on the digit branch. Conditional on the merged branch the model
 gives the correct token 0.9%, which is what wins a 1000-way argmax ~1.3% of the
-time; 0.003 ÷ 0.289 = 0.009 reconciles them. The unconditional number is the one
+time; 0.0027 ÷ 0.289 = 0.009 reconciles them. The unconditional number is the one
 the detector below needs, since it asks how likely the transcript is *as a
 one-step generation*.</sub>
 
@@ -69,7 +69,8 @@ was never emitted. Walking forward from a non-canonical span in Llama-3.2-1B:
 | 16 | 0.004 | 9% |
 | 64 | 0.002 | 15% |
 
-Magnitude decays ~100× within 16 tokens, but the flip rate plateaus near 10%
+Magnitude decays ~57× within 16 tokens (and ~110× by 64), but the flip rate
+plateaus near 10%
 rather than vanishing. Those distant flips are near-ties (median KL 0.002), so
 the practical reading is: **the span's neighbourhood is genuinely unreliable for
 per-position analysis; further out, only positions where the model was
@@ -80,7 +81,7 @@ near-indifferent are affected.**
 Detection is mechanical if you keep the IDs the model emitted: a generation is
 non-canonical iff `encode(decode(ids)) != ids`.
 
-Seven models, four tokenizer lineages, each at its as-released precision, pure
+Seven models, five tokenizer lineages, each at its as-released precision, pure
 sampling at temperature 1.0. Percentage of **emitted tokens** that are
 non-canonical:
 
@@ -97,10 +98,10 @@ non-canonical:
 Three things stand out.
 
 **Language matters more than model.** English is near zero for every modern
-model; CJK reaches 5.2%. A single "multilingual" number would hide a ~10× spread.
+model; CJK reaches 5.2%. A single "multilingual" number would hide a ~8× spread within one model.
 
 **Temperature dominates everything.** Exactly **0% under greedy decoding**,
-**0.2–1.0%** of tokens at temperature 1.0, and **3–4%** by temperature 1.5 — a
+**0.4–1.0%** of tokens at temperature 1.0, and **3–4%** by temperature 1.5 — a
 ~4× jump for half a point of temperature. This is a tail-sampling phenomenon:
 models concentrate mass on the canonical continuation, and these tokens come out
 of the tail.
@@ -141,8 +142,9 @@ The model has no handle on its own tokenization; what works is giving it a
 the concepts. Note the `digits` probe, the direct analogue of our toy, fails: you
 can't simply ask a model to emit a number digit-by-digit at the token level.
 
-Compliance is modest — models add quotes and explanations, so they emit the bare
-target only 15–42% of the time. The honest claim is "reliable **when** it
+Compliance is modest and varies sharply by model — models add quotes and
+explanations, so the bare target is emitted in only 41/80 concat trials for
+Llama-3.2-1B (51%) and 8/80 for Qwen2.5-1.5B (10%). The honest claim is "reliable **when** it
 complies."
 
 This matters mainly as a statement about mechanism. A policy wouldn't need to

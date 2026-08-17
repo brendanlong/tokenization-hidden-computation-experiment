@@ -12,7 +12,7 @@ failure: it checks availability *and* runs a real GPU op (which is what actually
 catches the driver-mismatch case, where ``nvidia-smi`` succeeds but torch can't
 initialize CUDA). Run it as the first step of every cloud ``run:`` block via
 ``python -m common.gpu --require-cuda``; it covers every downstream invocation in
-that job. See docs/skypilot.md and the ``skypilot-runpod-gotchas`` wiki page.
+that job. Re-place onto a healthy host rather than retrying in place.
 """
 
 from __future__ import annotations
@@ -57,8 +57,8 @@ def assert_cuda_healthy() -> None:
         "This host cannot run CUDA with the installed torch. Almost always a "
         "torch-build vs host-driver mismatch (e.g. a cu13 wheel on a driver-570 "
         "/ CUDA-12.8 host) or a CPU-only torch in this venv. Pin the torch CUDA "
-        "build to match the fleet driver (see docs/skypilot.md and the "
-        "skypilot-runpod-gotchas wiki page), or re-place onto a healthy host."
+        "build to match the fleet driver (see your cloud provider's docs and the "
+        "host, not this job), or re-place onto a healthy host."
     )
     if not torch.cuda.is_available():
         raise RuntimeError(f"CUDA is not available. {describe_gpu()}. {hint}")

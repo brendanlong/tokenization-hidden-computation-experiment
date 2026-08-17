@@ -25,13 +25,13 @@ adversary required.
    actually needed three for. Even absent any hidden computation, the round trip
    perturbs interpretability: next-token distributions at a non-canonical span
    boundary diverge (median KL 0.227, top-1 flips 50%), decaying ~100× within 16
-   tokens but with the flip rate plateauing near 10%.
+   tokens (and ~110× by 64) but with the flip rate plateauing near 10%.
 
 2. **In-the-wild rates are low, and fall with scale.** Across seven models and
-   four tokenizer lineages at as-released precision, the share of emitted tokens
+   five tokenizer lineages at as-released precision, the share of emitted tokens
    that are non-canonical runs 0–5%, dominated by language (English ≈ 0%, CJK up
-   to 5.2%) and by temperature (**exactly 0% greedy**, 0.2–1.0% at temperature
-   1.0, 3–4% at 1.5). Within the Llama family, CJK drops 5.20% → 2.93% → 1.21%
+   to 5.2%) and by temperature (**0% under greedy decoding**, 0.4–1.0% at
+   temperature 1.0, 3–4% at 1.5). Within the Llama family, CJK drops 5.20% → 2.93% → 1.21%
    from 1B → 3B → 8B.
 
 3. **But models can be prompted into it.** "Write `light` immediately followed by
@@ -59,13 +59,15 @@ adversary required.
 |---|---|
 | [WRITEUP.md](WRITEUP.md) | The argument: findings, asks, limitations, related work |
 | [RESULTS.md](RESULTS.md) | Full run log — every command, seed, wandb id, caveat, and the design dead-ends |
-| [EXPERIMENT_PLAN.md](EXPERIMENT_PLAN.md) | Hypotheses and predictions, written before running |
+| [EXPERIMENT_PLAN.md](EXPERIMENT_PLAN.md) | Hypotheses and predictions, written before running — its Phase-2 figures are pre-registration guesses and were superseded by RESULTS.md |
 | [HF dataset](https://huggingface.co/datasets/brendanlong/retok-noncanonical-tokenization) | Per-generation token IDs for all seven models + trained checkpoints |
+| [wandb project](https://wandb.ai/brendanlong-com/retok/overview) | Public training runs — the run IDs in RESULTS.md resolve here |
 
 ## Layout
 
 ```
 retok/                  the experiment
+  config.py             pydantic configs; defaults reproduce the headline run
   tokenizer.py          hand-built vocab: digit tokens + merged D-digit tokens, canonicalize()
   data.py               reversed-addition task, CoT/direct encoding, streaming dataset
   model.py              decoder-only transformer + parallel per-digit readout head
@@ -79,11 +81,13 @@ retok/                  the experiment
   phase2_induce.py      prompted induction + matched controls
   phase2_verify.py      CPU-only recomputation of every rate from published token IDs
   figures.py            all figures
+  tests/                CPU tests for the tokenizer, task and dataset plumbing
 common/                 training harness vendored from the source monorepo
   artifacts.py          resolve published checkpoints/records from the HF dataset
   streaming.py          worker seeding/sharding for generated data
   checkpoint.py         save + `hf:` checkpoint resolution
   config.py, gpu.py, schedule.py, wandb_utils.py
+  tests/                regression tests for the validity-critical plumbing
 figures/                published figures
 scripts/                reproduction entry points
 skypilot/reproduce.yaml generic cloud-GPU task
@@ -102,17 +106,21 @@ test (24 GB covers everything except gpt-oss-20b, which wants ~44 GB).
 
 ## Reproducing
 
-**Analyses — no GPU, no accounts.** Every number in the writeup, from the
-published checkpoints and generation records:
+**Analyses — no GPU, no accounts.** The Phase-1 tables and the seven-model
+rate table, recomputed from the published checkpoints and generation records:
 
 ```bash
 bash scripts/reproduce_analyses.sh
 ```
 
-This downloads ~23 MB of checkpoints and the per-model record files from the HF
-dataset (cached by `huggingface_hub`), then recomputes the Phase-1 tables and
-re-derives the Phase-2 rates from raw token IDs rather than trusting our stored
-flags. One caveat: the Llama and Gemma *tokenizers* are gated on HuggingFace,
+This downloads the three main checkpoints (~0.3 MB) and the seven per-model
+record files (~6 MB) from the HF dataset (cached by `huggingface_hub`), then
+recomputes the Phase-1 tables and re-derives the Phase-2 rate table from raw
+token IDs rather than trusting our stored flags.
+
+The decay and temperature tables are **not** covered by this path — no
+per-generation artifacts were published for them, so reproducing those means
+re-running generation on a GPU (see below). One caveat: the Llama and Gemma *tokenizers* are gated on HuggingFace,
 so those models' rates need an accepted license plus `huggingface-cli login` —
 the verifier skips them with a clear message rather than failing. Nothing here
 reads wandb, so no wandb account is needed.
@@ -140,11 +148,11 @@ runs are cheap enough to do locally.
 
 ## Hardware used
 
-Phase-1 training ran on a local RTX 3060 Ti (8 GB): 3 seeds × ~35 min, plus a
+Phase-1 training ran on a local RTX 3060 (8 GB): 3 seeds × ~35 min, plus a
 12-point width sweep. Phase-2 generation ran on RunPod A40s (44 GB) via
 SkyPilot, except GPT-2 and the small Llamas which ran locally. gpt-oss-20b ran
-bf16-dequantized rather than its as-released MXFP4 (no H100 capacity was
-available); gpt-oss-120b was never run.
+on an A100, bf16-dequantized rather than its as-released MXFP4 (no H100 capacity
+was available); gpt-oss-120b was never run.
 
 ## Provenance
 

@@ -1,24 +1,25 @@
 # Results: retok (hidden computational composition)
 
-> **Note on this log.** This file ships **verbatim** from the private monorepo
-> this experiment was extracted from, so it is an authentic record rather than a
-> tidied one. Its commands are in the monorepo's idiom; map them onto this repo
-> as follows:
+> **Note on this log.** This is the run log from the private monorepo this
+> experiment was extracted from — an authentic record rather than a tidied one,
+> including the dead-ends and self-corrections. Two mechanical edits were made:
+> module paths were rewritten (`experiments.retok.X` → `retok.X`) to match this
+> repo, and one broken markdown table header was repaired. Nothing else was
+> changed, so the commands below are in the monorepo's idiom. Map them as
+> follows:
 >
 > | in this log | in this repo |
 > |---|---|
 > | `./train.sh local retok -- ARGS` | `uv run python -m retok.train ARGS` |
-> | `python -m retok.<mod>` | unchanged (already rewritten from `experiments.retok.<mod>`) |
-> | `RUN_NAME=... ` / `--save-checkpoint` | no public equivalent — the final checkpoint is always written to `--checkpoint-dir` |
-> | any `s3://.../retok/checkpoints/<run>/final.pt` | `hf:checkpoints/<run>/final.pt` in the [HF dataset](https://huggingface.co/datasets/brendanlong/retok-noncanonical-tokenization) |
-> | any `s3://.../retok/artifacts/<f>.jsonl` | `<f>.jsonl` at the root of the same dataset |
->
-> (The log spells the private bucket inconsistently — `brendanlong-experiments` in some entries, `brendanlong-retok` in others. Neither is public; both map to the dataset above.)
+> | `RUN_NAME=...` / `--save-checkpoint` | no public equivalent — the final checkpoint is always written to `--checkpoint-dir` |
+> | `s3://brendanlong-experiments/retok/checkpoints/<run>/final.pt` | `hf:checkpoints/<run>/final.pt` in the [HF dataset](https://huggingface.co/datasets/brendanlong/retok-noncanonical-tokenization) |
+> | `s3://brendanlong-experiments/retok/artifacts/<f>.jsonl` | `<f>.jsonl` at the root of the same dataset |
 > | `skypilot/train-retok.yaml`, `skypilot/probe-retok*.yaml` | [`skypilot/reproduce.yaml`](skypilot/reproduce.yaml) (generic) |
 >
-> The wandb run IDs are in project `retok` under the `brendanlong` entity.
-> Reproduction entry points are in [`scripts/`](scripts/); see the
-> [README](README.md).
+> The private S3 bucket is not public; the HF dataset above is the public
+> equivalent. wandb run IDs are in project `retok` under the `brendanlong`
+> entity. Reproduction entry points are in [`scripts/`](scripts/).
+
 
 **Question.** Can a model's actual token stream differ from the canonical
 re-tokenization of its output in a way that flips per-position interpretability
@@ -47,7 +48,7 @@ RUN_NAME=retok-main-s$s ./train.sh local retok -- --seed $s --save-checkpoint --
 ```
 - Config: dim=16, `direct_fraction`=0.3, `generate_n`=20M (39k steps).
 - wandb runs: `gb6a5vp4` (s0), `2zhdhlkl` (s1), `wrlumw7d` (s2), project `retok`.
-- Checkpoints: `s3://brendanlong-retok/checkpoints/retok-main-s{0,1,2}/final.pt`.
+- Checkpoints: `s3://brendanlong-experiments/retok/checkpoints/retok-main-s{0,1,2}/final.pt`.
 
 | metric | s0 | s1 | s2 | mean |
 |---|---|---|---|---|
@@ -248,7 +249,7 @@ uv run python -m retok.phase2_probe --model <name> --dtype auto \
     --jsonl-out data/retok/artifacts/<name>.jsonl
 
 # re-derive every rate from the published token IDs (CPU only)
-aws s3 sync s3://brendanlong-retok/artifacts/ data/retok/artifacts/
+aws s3 sync s3://brendanlong-experiments/retok/artifacts/ data/retok/artifacts/
 uv run python -m retok.phase2_verify data/retok/artifacts/*.jsonl
 ```
 
@@ -387,8 +388,6 @@ Both would show that *we* can confuse the model by manipulating its input, which
 is already known; here the input is ordinary text and the model must choose the
 segmentation itself.
 
-| probe | prompt | Llama-3.2-1B | Qwen2.5-1.5B |
-|---|---|---|---|
 | probe | Llama-3.2-1B | Qwen2.5-1.5B |
 |---|---|---|
 | **concat** — "write `light` immediately followed by `house`, no separator" | **93%** induced (38/41) | **75%** (6/8) |
@@ -463,7 +462,8 @@ emitted. Walking k tokens past the span (comparing at matched *text* positions):
 | 32 | 44 | 0.012 | 0.003 | 11% |
 | 64 | 41 | 0.022 | 0.002 | 15% |
 
-- **Magnitude dilutes ~100× within 16 tokens** (median KL 0.227 → 0.004).
+- **Magnitude dilutes ~57× within 16 tokens** (median KL 0.227 → 0.004),
+  and ~110× by 64 tokens (→ 0.002).
 - **But the top-1 flip rate does not reach zero** — it falls from 50% to a
   plateau around **9–15%** and stays there out to 64 tokens. A re-tokenized
   transcript is still picking a different argmax at roughly 1 in 8 positions,
