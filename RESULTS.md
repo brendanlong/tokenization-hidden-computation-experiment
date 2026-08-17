@@ -378,6 +378,43 @@ prefix text*:
   / 5%; multilingual-Cyrillic 25 / 64% / 4%; multilingual-CJK 35 / 49% / 0%;
   code 23 / 30% / 9%; english 4 / 25% / 0%; arithmetic 1 / 100% / 0% (n=1).
 
+### Greedy decoding is NOT 0% — correction (2026-08-17, `phase2_probe --temperature 0`)
+
+The earlier "exactly 0% under greedy decoding" came from `phase2_temperature`,
+whose prompt set is `PROMPTS["code"][:4] + PROMPTS["multilingual_latin"][:4]` —
+**8 prompts, 1 deterministic generation each, 2 models**. Greedy is
+deterministic, so `--n-samples` cannot add evidence there; only more prompts and
+more models can. Re-ran at argmax over the **full 25-prompt set**:
+
+Command (per model):
+
+```
+uv run python -m retok.phase2_probe --model <name> --dtype auto \
+    --n-samples 1 --max-new-tokens 200 --temperature 0.0 --seed 31 \
+    --jsonl-out data/retok/greedy/<name>.jsonl
+```
+
+(`phase2_probe` previously hardcoded `do_sample=True`; it now switches to
+`do_sample=False` at temperature 0 and forces 1 generation per prompt.)
+
+| model | gens with ≥1 span | per-token | where |
+|---|--:|--:|---|
+| GPT-2 | 2/24 | 0.12% | arithmetic (2/5 prompts) |
+| Llama-3.2-1B | 1/25 | 0.08% | code |
+| Qwen2.5-1.5B | 2/25 | 0.09% | Cyrillic, code |
+| Llama-3.2-3B | 1/25 | 0.05% | multilingual-Latin |
+| **pooled** | **6/99** | **0.08%** | |
+
+**So the model's own argmax continuation is sometimes a non-canonical token.**
+The original 8-prompt subset contained no arithmetic prompts at all, which is
+precisely where GPT-2's greedy hits are — a sampling-of-prompts artifact, not a
+sampling-of-tokens one. Temperature still dominates (0.08% → 0.4–1.0% → 3–4%),
+but it buys ~an order of magnitude, not immunity, and "turn the temperature
+down" is not a mitigation.
+
+Gemma-2-2b was skipped: as-released fp32 at 2B does not fit the 8 GB local card.
+Llama-3.1-8B and gpt-oss-20b likewise need a bigger GPU.
+
 ### Can a prompt *induce* non-canonical generation? (`phase2_induce`)
 
 Everything above is accidental — tokens sampled from the tail. This asks whether
@@ -497,7 +534,8 @@ Concrete boundaries (actual span | canonical span → predicted next token):
 
 **Honest magnitude:** real and measurable, but per-instance **small and mostly
 soft** — sub-1% of tokens, and most next-token flips are low-confidence near-ties
-or whitespace, with a thin tail (10% of the sparse boundaries, CI 6–15%) of
+or whitespace, with a thin tail (**4%** of the sparse boundaries, 6/149,
+CI 2–9%) of
 confident changes, of which only a minority are semantic. **Framing:** the toy carries the controlled mechanism +
 the hidden-computation/calibration claim; Phase 2 is the existence proof. The
 case for logging token IDs rests on *silent + near-zero mitigation cost + tail
@@ -505,6 +543,18 @@ risk on a span you can't identify in advance*, not on magnitude. Example
 galleries: `phase2_probe` / `phase2_interp` stdout.
 
 ### Go/no-go sweeps (local RTX 3060, direct `uv run`, results discarded)
+
+> **Superseded — do not cite the numbers in this section.** These are short
+> undertrained probes (6–8M examples) that preceded the official 15M sweep. Where
+> the two disagree, the official sweep (appendix table above) is authoritative:
+> re-evaluating the **published** checkpoints on 2026-08-17 reproduces the
+> appendix row-for-row (dim=24 one-step 100% / direct 1.9%; dim=32 one-step
+> 59.1% / direct 3.4%; dim=64 one-step 100% / direct **97.7%**), not the numbers
+> below. In particular the "Bonus (dim=64): direct-merged = 1%" claim does **not**
+> hold for the official runs — at dim=64 the merged form succeeds, which is
+> exactly why the headline claim is scoped to dim=16. The dim=32 one-step 59.5%
+> also *replicates* (59.1%), so it is a property of that checkpoint rather than
+> an eval fluke — though whether it is a training-seed outlier is still untested.
 
 A sequence of short local sweeps to find a task regime where CoT succeeds while
 direct one-step addition fails with carry-chain length. These drove three

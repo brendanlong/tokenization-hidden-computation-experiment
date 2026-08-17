@@ -191,7 +191,15 @@ def plot_scale_ladder(out_path: Path) -> None:
     print(f"Wrote {out_path}")
 
 
-# Temperature sweep (code+multilingual prompts, 48 gens/cell). See RESULTS.md.
+# Temperature sweep (code+multilingual prompts, 48 gens/cell; the temp-0 cell is
+# 8 deterministic gens, since greedy repeats). See RESULTS.md.
+#
+# NOTE the temp-0 zeros below are subset-limited, not a true zero: re-running
+# greedy over the full 25-prompt set finds 0.08% pooled across four models
+# (RESULTS.md, "Greedy decoding is NOT 0%"). The 8-prompt sweep set contains no
+# arithmetic prompts, which is where GPT-2's greedy hits are. Kept as measured
+# so this curve stays one internally-consistent experiment; the annotation on
+# the plot carries the correction.
 PHASE2_TEMPS = [0.0, 0.7, 1.0, 1.5, 2.0]
 # CONTROLLED (pure sampling). Per-generation here is fine: it's a within-model
 # comparison at FIXED generation length, so the length-saturation problem that
@@ -224,10 +232,21 @@ def plot_temperature(out_path: Path) -> None:
     ax.set_ylabel("emitted tokens that are non-canonical (%)")
     ax.set_ylim(-0.2, 5.0)
     ax.set_title(
-        "Non-canonical generation is a tail-sampling effect\n"
-        "Exactly 0% under greedy decoding; 3-4% of tokens by temperature 1.5",
+        "Non-canonical generation is largely a tail-sampling effect\n"
+        "~0.1% under greedy decoding; 3-4% of tokens by temperature 1.5",
         fontsize=10.5,
         loc="left",
+    )
+    # The 0.0 points read as an exact zero, which a wider prompt set refutes.
+    ax.annotate(
+        "greedy is 0% on these 8 prompts, but\n"
+        "0.08% over the full 25-prompt set\n"
+        "(6/99 gens) — low, not immune",
+        xy=(0.0, 0.0),
+        xytext=(0.28, 1.45),
+        fontsize=8.2,
+        color=MUTED,
+        arrowprops={"arrowstyle": "->", "color": MUTED, "linewidth": 0.9},
     )
     ax.legend(loc="upper left", framealpha=0.92, edgecolor="#dddddd", fontsize=9)
     ax.grid(True, color="#e8e8e6", linewidth=0.8, zorder=0)

@@ -100,11 +100,18 @@ Three things stand out.
 **Language matters more than model.** English is near zero for every modern
 model; CJK reaches 5.2%. A single "multilingual" number would hide a ~8× spread within one model.
 
-**Temperature dominates everything.** Exactly **0% under greedy decoding**,
-**0.4–1.0%** of tokens at temperature 1.0, and **3–4%** by temperature 1.5 — a
-~4× jump for half a point of temperature. This is a tail-sampling phenomenon:
-models concentrate mass on the canonical continuation, and these tokens come out
-of the tail.
+**Temperature dominates everything.** **0.08%** of tokens under greedy
+decoding, **0.4–1.0%** at temperature 1.0, and **3–4%** by temperature 1.5 — a
+~4× jump for half a point of temperature. This is largely a tail-sampling
+phenomenon: models concentrate mass on the canonical continuation, and most of
+these tokens come out of the tail.
+
+But greedy is **not zero**, which we initially reported and had to retract. At
+argmax across 99 generations from four models, 6 still contained a non-canonical
+span — the model's *most likely* continuation is sometimes a non-canonical
+token. Our first reading of 0% came from an 8-prompt subset that happened to
+exclude arithmetic, which is exactly where GPT-2's greedy hits are (2 of 5
+prompts). Temperature buys you roughly an order of magnitude, not immunity.
 
 ![Non-canonical rate vs temperature](figures/phase2_temperature.png)
 
@@ -239,7 +246,7 @@ whether this stays a validity bug or becomes a channel, and we haven't run it.
   rate rests on a handful of events; we give raw counts and Wilson intervals
   rather than bare percentages, and the intervals are wide. Read the rates as
   order-of-magnitude. We got burned by this once already: an early Qwen reading
-  of 0% was 0-of-64 and did not survive re-measurement at n=504.
+  of 0% was 0-of-64 and did not survive re-measurement at n=300.
 - The **qualitative orderings** (temperature dependence, multilingual ≫ English,
   rate falling with scale) are what we'd defend; individual cells are not precise.
 - The interp-mismatch metric is a **next-token divergence at a boundary** — a

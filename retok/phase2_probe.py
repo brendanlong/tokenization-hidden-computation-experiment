@@ -219,17 +219,30 @@ def probe(
             # nothing). Off-canonical tokens live in the tail, so inherited
             # truncation suppresses this metric by ~3x — a first-order
             # cross-model confound.
-            out = model.generate(
-                **enc,
-                max_new_tokens=max_new_tokens,
-                do_sample=True,
-                temperature=temperature,
-                top_k=0,
-                top_p=1.0,
-                repetition_penalty=1.0,
-                num_return_sequences=n_samples,
-                pad_token_id=tokenizer.eos_token_id,
-            )
+            # temperature=0 means greedy, which is deterministic: sampling
+            # params are meaningless and repeated draws are identical, so the
+            # only way to add evidence there is more prompts/models, not
+            # n_samples. (Greedy is NOT non-canonical-free — see RESULTS.md.)
+            if temperature == 0.0:
+                out = model.generate(
+                    **enc,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=False,
+                    num_return_sequences=1,
+                    pad_token_id=tokenizer.eos_token_id,
+                )
+            else:
+                out = model.generate(
+                    **enc,
+                    max_new_tokens=max_new_tokens,
+                    do_sample=True,
+                    temperature=temperature,
+                    top_k=0,
+                    top_p=1.0,
+                    repetition_penalty=1.0,
+                    num_return_sequences=n_samples,
+                    pad_token_id=tokenizer.eos_token_id,
+                )
             for seq in out:
                 gen_ids = seq[prompt_len:].tolist()
                 # strip trailing pad/eos
