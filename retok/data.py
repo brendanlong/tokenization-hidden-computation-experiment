@@ -147,7 +147,18 @@ def encode_example(tok: RetokTokenizer, a: int, b: int, fmt: int) -> Encoded:
     answer) so the model can actually read the digits it must add — a merged
     operand token would hide them and make digit-wise computation impossible.
     The merged vocabulary is used only for the *answer* (direct format), which
-    is the span a re-tokenized transcript collapses. Note that canonicalizing a
+    is the span a re-tokenized transcript collapses.
+
+    **Caveat this creates:** a 3-digit operand run is itself mergeable, so the
+    prompt is not canonical under :meth:`RetokTokenizer.canonicalize` — the full
+    stream ``7 5 0 + 8 6 0 = 5 2 1`` canonicalizes to
+    ``[750] + [860] = [521]``, merging the operands too. The analysis therefore
+    treats the *direct format* (digit operands, merged answer) as the canonical
+    replay rather than canonicalizing the whole sequence: the operands are
+    conditioning context the model was given, not tokens it emitted, and holding
+    them fixed isolates the answer-span collapse. Making the prompt genuinely
+    canonical would need operand runs shorter than ``n_digits`` (e.g. 2-digit
+    operands, 3-digit answers), which is a retrain. Note that canonicalizing a
     CoT example's generated answer digits yields exactly this function's direct
     encoding of the same ``(a, b)`` — "canonical replay" == "direct format".
 

@@ -241,6 +241,17 @@ whether this stays a validity bug or becomes a channel, and we haven't run it.
 
 - The toy's magnitude is **constructed by design** — we chose the vocabulary and
   the width. It demonstrates the mechanism, not a deployment rate.
+- **The toy's own prompt is non-canonical.** Operands are supplied as individual
+  digit tokens so the model can read the digits it must add — merged operands
+  hide them and the task becomes unlearnable at any depth. But our
+  canonicalization rule merges *any* 3-digit run, so the prompt `750 + 860 =`
+  would itself re-encode to `[750] + [860] =`. The toy therefore models **the
+  generated answer span collapsing**, not the whole transcript round-tripping,
+  and no real encoder would produce its prompt. This does not affect the
+  measurement — both conditions hold the prompt encoding fixed, so the 3→1
+  comparison isolates the answer span — but it is a construction artifact. A
+  cleaner build (2-digit operands with a 3-digit answer, so only answer runs are
+  mergeable) would remove it at the cost of a retrain.
 - **Small N is the main statistical weakness.** Small open models (≤20B), a few
   hundred generations per cell, one seed, short completions. The confident-flip
   rate rests on a handful of events; we give raw counts and Wilson intervals
