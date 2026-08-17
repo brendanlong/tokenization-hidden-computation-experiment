@@ -1,0 +1,81 @@
+[project]
+name = "tokenization-hidden-computation-experiment"
+version = "0.1.0"
+description = "Non-canonical tokenization hides computation from retokenized transcripts"
+requires-python = ">=3.12"
+dependencies = [
+    # Model, training, tensors
+    "torch>=2.0",
+    # Real-model generation for the wild-caught measurements
+    "transformers>=4.40",
+    "accelerate>=1.0",
+    # gpt-oss dequantization kernels. Pinned: an unpinned newer `kernels`
+    # broke `import transformers` (see RESULTS.md).
+    "kernels>=0.6.1,<=0.9",
+    # Configs
+    "pydantic>=2.0",
+    # Linear probes + array math (analysis.py)
+    "scikit-learn>=1.5",
+    "numpy>=1.26",
+    # Figures
+    "matplotlib>=3.9",
+    # Experiment tracking
+    "wandb>=0.19",
+    # Published checkpoints + generation records
+    "huggingface-hub>=0.25",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.0",
+    "pyright>=1.1",
+    "ruff>=0.9",
+    "pytest>=8.0",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+select = [
+    "E",     # pycodestyle errors
+    "F",     # pyflakes
+    "I",     # isort
+    "UP",    # pyupgrade
+    "B",     # flake8-bugbear
+    "SIM",   # flake8-simplify
+    "TCH",   # flake8-type-checking
+    "ANN",   # flake8-annotations
+    "RUF",   # ruff-specific rules
+]
+ignore = []
+
+[tool.ruff.lint.isort]
+known-first-party = ["common", "retok"]
+
+[tool.pytest.ini_options]
+markers = [
+    "smoke: end-to-end CPU training smoke tests (slower; run in a dedicated CI job)",
+]
+
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "standard"
+venvPath = "."
+venv = ".venv"
+# Specifying `exclude` REPLACES pyright's built-in defaults, so we must re-list
+# them — otherwise pyright analyzes `.venv` (all installed deps, incl. torch)
+# and effectively never finishes.
+exclude = [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.*",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["common", "retok"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"

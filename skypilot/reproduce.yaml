@@ -1,0 +1,54 @@
+# Generic SkyPilot task for reproducing this experiment on a cloud GPU.
+#
+#   sky launch skypilot/reproduce.yaml --infra <your-cloud> --down -y
+#
+# Or run one command instead of the full script:
+#
+#   sky launch skypilot/reproduce.yaml --infra <your-cloud> --down -y \
+#       --env RUN_CMD="uv run python -m retok.phase2_probe --model gpt2 \
+#                      --dtype auto --jsonl-out out/gpt2.jsonl"
+#
+# `--down` tears the cluster down when the task finishes. Results are written
+# under the working directory on the remote host — copy anything you want to
+# keep back with `sky rsync` or add your own upload step to `run`.
+
+name: retok-reproduce
+
+resources:
+  # Any of these will do. The toy training runs fit in 8 GB; Phase-2
+  # generation needs enough VRAM for the model under test (A40/A100 covers
+  # everything including gpt-oss-20b at ~44 GB).
+  accelerators: {A40:1, A100:1, A10G:1, L4:1, RTX3090:1, A100-80GB:1}
+  disk_size: 100
+  # On-demand by default: this is an unmanaged task, so a spot preemption
+  # would lose the run with no retry and no way to fetch results. Set
+  # `use_spot: true` (cheaper) only if you're willing to redo the work, or
+  # use `sky jobs launch` instead, which handles recovery.
+
+workdir: .
+
+envs:
+  # Override to run a single command instead of the full training script.
+  RUN_CMD: ""
+  # Optional. Empty defaults keep these genuinely optional: setting a value to
+  # `null` instead would make SkyPilot *require* it and abort the launch.
+  # Pass with e.g. `--env WANDB_API_KEY=...` (or --secret, to keep it out of logs).
+  WANDB_API_KEY: ""
+  HF_TOKEN: ""
+
+setup: |
+  pip install uv
+  uv sync
+
+run: |
+  set -euo pipefail
+  nvidia-smi
+  if [ -n "${WANDB_API_KEY:-}" ]; then
+    uv run wandb login "$WANDB_API_KEY"
+  else
+    export WANDB_MODE=disabled
+  fi
+  if [ -n "${HF_TOKEN:-}" ]; then
+    uv run huggingface-cli login --token "$HF_TOKEN"
+  fi
+  eval "${RUN_CMD:-bash scripts/reproduce_training.sh}"
