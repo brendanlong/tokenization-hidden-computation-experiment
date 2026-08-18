@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import random
 
+import pytest
 import torch
 from torch.utils.data import DataLoader
 
@@ -237,3 +238,83 @@ def test_model_forward_shapes() -> None:
     # parallel one-step readout: (B, n_digits, base) at the "=" position
     one_step = model.one_step_logits(ids, eq_position(3))
     assert one_step.shape == (4, 3, 10)
+
+
+# --- Phase-2 per-token attribution ------------------------------------------
+
+
+def _rate_stats(pairs: list[tuple[list[int], list[int]]]) -> dict[str, float]:
+    """Aggregate (actual, canonical) token-id pairs the way phase2_probe does."""
+    import difflib
+
+    n = len(pairs)
+    toks = sum(len(a) for a, _ in pairs)
+    n_nc = 0
+    bad = 0
+    for actual, canon in pairs:
+        if canon == actual:
+            continue
+        n_nc += 1
+        bad += sum(
+            i2 - i1
+            for op, i1, i2, _, _ in difflib.SequenceMatcher(
+                a=actual, b=canon, autojunk=False
+            ).get_opcodes()
+            if op != "equal"
+        )
+    return {
+        "per_generation": n_nc / n,
+        "mean_len": toks / n,
+        "affected_per_nc": bad / max(1, n_nc),
+        "per_token": bad / toks,
+    }
+
+
+def test_per_token_identity() -> None:
+    """per_token == per_generation * affected_per_nc_gen / mean_len.
+
+    The two rates are reported side by side in RESULTS.md precisely so they can
+    be cross-checked; this pins the identity that relates them. It also catches
+    the naive attribution (boolean / token count), which does NOT satisfy it.
+    """
+    pairs = [
+        ([1, 2, 3, 4, 5], [1, 2, 3, 4, 5]),  # canonical
+        ([1, 2, 3, 4, 5], [1, 9, 9, 4, 5]),  # 2 actual tokens changed
+        ([6, 7, 8], [6, 7, 8]),  # canonical
+        ([1, 2, 3, 4], [1, 22, 4]),  # 2 actual tokens -> 1 canonical
+    ]
+    st = _rate_stats(pairs)
+    assert st["per_token"] == pytest.approx(
+        st["per_generation"] * st["affected_per_nc"] / st["mean_len"]
+    )
+    # 4 affected actual tokens out of 17 emitted
+    assert st["per_token"] == pytest.approx(4 / 17)
+    # The naive version disagrees, which is the whole point of stating the identity.
+    naive = st["per_generation"] / st["mean_len"]
+    assert naive != pytest.approx(st["per_token"])
+
+
+def test_autojunk_disabled_matters() -> None:
+    """SequenceMatcher's autojunk silently corrupts diffs on long token streams.
+
+    Any element in >1% of a sequence of length >=200 is treated as junk and
+    cannot anchor a match. Token streams are full of such elements (spaces,
+    common words), so the default would misattribute the rate.
+    """
+    import difflib
+
+    common = 7  # stands in for a frequent token like " the"
+    actual = [common] * 300 + [1, 2] + [common] * 10
+    canon = [common] * 300 + [99] + [common] * 10
+
+    def changed(autojunk: bool) -> int:
+        return sum(
+            i2 - i1
+            for op, i1, i2, _, _ in difflib.SequenceMatcher(
+                a=actual, b=canon, autojunk=autojunk
+            ).get_opcodes()
+            if op != "equal"
+        )
+
+    assert changed(autojunk=False) == 2  # exactly the two substituted tokens
+    assert changed(autojunk=True) > 2  # junk heuristic over-attributes

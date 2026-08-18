@@ -60,7 +60,7 @@ adversary required.
 | [WRITEUP.md](WRITEUP.md) | The argument: findings, asks, limitations, related work |
 | [RESULTS.md](RESULTS.md) | Full run log — every command, seed, wandb id, caveat, and the design dead-ends |
 | [EXPERIMENT_PLAN.md](EXPERIMENT_PLAN.md) | Hypotheses and predictions, written before running — its Phase-2 figures are pre-registration guesses and were superseded by RESULTS.md |
-| [HF dataset](https://huggingface.co/datasets/brendanlong/retok-noncanonical-tokenization) | Per-generation token IDs for all seven models + trained checkpoints |
+| [HF dataset](https://huggingface.co/datasets/brendanlong/retok-noncanonical-tokenization) | Per-generation token IDs for all seven models, the three comparison models, and trained checkpoints |
 | [wandb project](https://wandb.ai/brendanlong-com/retok/overview) | Public training runs — the run IDs in RESULTS.md resolve here |
 
 ## Layout

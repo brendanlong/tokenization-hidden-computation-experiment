@@ -19,7 +19,7 @@ Given a trained checkpoint, computes:
 
 Run:
     uv run python -m retok.analysis \
-        --checkpoint s3://brendanlong-experiments/retok/checkpoints/<run>/final.pt \
+        --checkpoint hf:checkpoints/retok-main-s0/final.pt \
         --out data/retok/analysis
 """
 
