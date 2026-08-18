@@ -41,6 +41,16 @@ uv run python -m retok.phase2_verify --all-published
 
 echo
 echo "=============================================================="
+echo "Phase 2 — rates by the script the tokens are actually in"
+echo "=============================================================="
+# The domain labels are the PROMPT's language, not the output's: the small
+# Llamas answer Russian and Japanese prompts in English, so their multilingual
+# cells measure mostly-Latin text. This re-attributes each token to its own
+# script, which is comparable across models. WRITEUP.md §2.
+uv run python -m retok.phase2_script --all-published
+
+echo
+echo "=============================================================="
 echo "Figures"
 echo "=============================================================="
 # Numbers are the official runs recorded in RESULTS.md, so this regenerates

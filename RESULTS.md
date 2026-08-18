@@ -265,6 +265,114 @@ ordered — Qwen-1.5B and Gemma-2b both sit below Llama-3B. So the *controlled*
 claim is the within-family ladder; the cross-family version is a trend, not a
 law. Both panels are in `figures/phase2_scale.png`.
 
+### Direct comparison: their models, our methodology (2026-08-18)
+
+The "Weird Re-Tokenization" agenda post's fig. 2 orders models the opposite way
+we do, so we measured the three of its five that fit an A40 with **our** setup
+(200 max new tokens, temp 1.0, pure sampling, as-released dtype, n=12/prompt —
+identical to the seven models above). Mamba-130M skipped (not a transformer),
+Qwen3-30B-A3B skipped (needs an A100-80GB).
+
+Command: `sky launch skypilot/probe-retok.yaml -c retok-lw --infra runpod
+--gpus A40:1 --down --yes --retry-until-up --env RUN_NAME=lw-compare --env
+PROBE_MODELS="google/gemma-2b-it google/gemma-3-4b-it
+meta-llama/Llama-2-7b-chat-hf"`. ~11 min on an A40 at $0.44/hr ≈ **$0.10**.
+Artifacts: `lw_comparison/` in the HF dataset.
+
+| model | pooled per-token | per-generation | their fig. 2 (per-seq @512, uncond.) |
+|---|---:|---:|---:|
+| Gemma-1-2B-it | **0.62%** | 25% | ~1.5% — their **lowest** |
+| Llama-2-7B-chat | 0.10% | 6% | ~58% |
+| Gemma-3-4B-it | **0.04%** | 3% | ~72% — their **highest** |
+
+**The ordering is inverted on the two Gemmas.** We find Gemma-1-2B the *least*
+canonical of the three and Gemma-3-4B the *most*, by ~15×; they find the
+reverse, by ~48×. Ours is what our scale/recency story predicts — Gemma-3 (2025,
+4B) concentrates far more mass on the canonical continuation than Gemma-1 (2024,
+2B). Theirs is what makes their size plot non-monotone.
+
+**Not a script-composition artifact.** Both Gemmas answer in the prompt's script
+(Gemma-1-2B 77% Cyrillic / 93% CJK; Gemma-3-4B 59% / 97%), so the confound from
+the section above does not explain the gap. By output script:
+
+| model | Latin | Cyrillic | CJK |
+|---|---:|---:|---:|
+| Gemma-1-2B-it | 0.54% (21516) | **4.55%** (1603) | 2.11% (2082) |
+| Gemma-3-4B-it | 0.07% (25289) | **0.10%** (2079) | 0.00% (2968) |
+| Llama-2-7B-chat | 0.10% (32417) | 3.93% (382) | 0.00% (561) |
+
+45× apart on Cyrillic tokens, same direction. (Llama-2-7B answers Russian and
+Japanese prompts in English — 10% / 12% in-script — so its multilingual cells
+are thin and mostly measure Latin text, like the small Llama-3.2s.)
+
+**Assessment.** Two independent disagreements with that figure now: the sign of
+the length trend (ours rises, theirs falls, and non-recovering BPE requires
+rising), and the ordering of the two Gemmas. Both are large. We cannot explain
+either from the figure alone, so the likeliest reading is that their y-axis
+measures a different quantity than `encode(decode(ids)) != ids` on the emitted
+tokens. Worth resolving in the thread before either set of numbers is cited; not
+presented as a refutation.
+
+### The domain labels are the PROMPT's language, not the output's (2026-08-18)
+
+Prompted by "could the rates differ because models talk about different
+things?" — they can, and it changes the mechanism. Every domain rate above is
+keyed by the prompt. Measuring what the models actually *wrote* (fraction of
+letters in the expected script):
+
+| model | ml-Cyrillic prompt | ml-CJK prompt |
+|---|---:|---:|
+| Llama-3.2-1B | 11% Cyrillic | 7% CJK |
+| Llama-3.2-3B | 11% Cyrillic | 12% CJK |
+| Llama-3.1-8B | **82%** Cyrillic | **37%** CJK |
+| Qwen2.5-1.5B | 89% Cyrillic | 97% CJK |
+
+The small Llamas answer Russian and Japanese prompts overwhelmingly **in
+English**. So "Llama-3.2-1B, ml-Cyrillic, 4.06%" is a rate over text that is 89%
+*not* Cyrillic, and comparing that cell to Llama-3.1-8B's compares different
+content as much as different models.
+
+Re-attributing every token to the script of its own surface
+(`phase2_script.py`, CPU-only, ≥90% of non-canonical tokens are letter-bearing
+so the view is near-complete):
+
+| model | Latin | Cyrillic | CJK |
+|---|---:|---:|---:|
+| GPT-2 | 1.92% (38511) | 0.32% (624) | n<300 |
+| Llama-3.2-1B | 1.33% (31504) | 0.86% (350) | 0.42% (708) |
+| Qwen2.5-1.5B | 0.28% (30145) | 0.15% (2671) | 0.76% (3419) |
+| Gemma-2-2b | 0.24% (30126) | 1.16% (1546) | 1.07% (1688) |
+| Llama-3.2-3B | 0.72% (32675) | 1.33% (525) | 0.29% (1026) |
+| Llama-3.1-8B | 0.30% (31507) | 1.24% (2499) | 0.12% (2433) |
+| gpt-oss-20b | 0.03% (35134) | 0.28% (2127) | 0.00% (2232) |
+
+**CJK tokens are among the *lowest*-rate tokens, not the highest.** The headline
+"CJK up to 5.2%" is a property of CJK-*prompted* generations, not of CJK text.
+
+**What actually drives it — the prompt pushing the model off-distribution.**
+Holding the script fixed at Latin and splitting by which prompt produced it:
+
+| model | english prompt | ml-CJK prompt | ml-Cyrillic prompt |
+|---|---:|---:|---:|
+| Llama-3.2-1B | 0.03% (6220) | **6.91%** (2360) | **4.81%** (1830) |
+| Llama-3.1-8B | 0.03% (6133) | **3.36%** (1189) | **2.18%** (367) |
+| GPT-2 | 1.00% (5190) | 1.53% (1826) | 0.40% (2263) |
+
+Same script, same model — a **~200× higher** rate on Latin tokens written in
+response to a CJK prompt than to an English one. So the effect is not "some
+scripts tokenize badly"; it is **"text produced off-distribution is sampled from
+a flatter distribution, and non-canonical tokens live in the tail"** — the same
+tail-sampling mechanism as the temperature result, reached by a different route.
+This is a better story than the one we had, and it is the one the data supports.
+
+**The scale result survives this, controlled.** Within Latin script it is
+monotone for the Llama ladder (1.33% → 0.72% → 0.30%, n≈32k each — the
+best-powered version of the claim), and the off-distribution rates fall the same
+way (CJK-prompted Latin 6.91% → 3.36%; Cyrillic-prompted 4.81% → 2.18%). Only
+the *by-script Cyrillic* column fails to be monotone (0.86% → 1.33% → 1.24%),
+and its 1B cell rests on 350 tokens. So: report the scale claim on Latin script
+or pooled, not on the multilingual domain columns.
+
 ### Generation length is a first-order confound for sequence-level rates
 
 All rates here are at **200 `max_new_tokens`** (mean ~180 actually emitted).
@@ -356,6 +464,80 @@ diffs, and the full run config. `phase2_verify` recomputes canonicality from the
 IDs rather than trusting the stored flags, so it audits the analysis
 independently of generation — it is what caught a dtype regression that had
 silently shifted GPT-2's numbers.
+
+**How the per-token rate is attributed.** Detection is sequence-level
+(`encode(decode(ids)) != ids`), so turning it into a per-token rate needs an
+explicit choice. It is **not** the boolean divided by the token count. The two
+sequences are aligned and the emitted tokens inside a changed region are counted
+(`phase2_probe.py:150`, `:320`):
+
+```python
+canon = tokenizer.encode(tokenizer.decode(gen_ids))
+for op, i1, i2, j1, j2 in difflib.SequenceMatcher(
+    a=gen_ids, b=canon, autojunk=False
+).get_opcodes():
+    if op != "equal":
+        n_bad += i2 - i1  # tokens on the ACTUAL side of the region
+rate = n_bad / len(gen_ids)
+```
+
+So the quantity is *"what fraction of the tokens the model actually emitted sat
+in a span that re-tokenization altered"* — which is the right denominator for
+interp validity, since those are exactly the positions whose residuals an
+analyst would be misreading.
+
+Two implementation details that matter more than they look:
+
+- **`autojunk=False` is load-bearing.** `SequenceMatcher` by default treats any
+  element occurring in >1% of a sequence of length ≥200 as "junk" and will not
+  anchor matches on it. On token streams that is spaces, `the`, punctuation —
+  precisely the long generations we care about would get a distorted diff.
+- **`SequenceMatcher` is not a minimal edit distance**, it is a recursive
+  longest-contiguous-match heuristic. For the short localized substitutions here
+  it agrees with a minimal alignment, but that is not guaranteed in general.
+  Pure-insertion opcodes (assigned 0, since no emitted token was touched) are
+  negligible: 2 of 419 differing opcodes for GPT-2, 0 for both Llamas.
+
+**Sensitivity to the choice** — alternatives move the number ~±20%, so the
+qualitative claims do not rest on it. The naive version is 5× off *and*
+reintroduces the length confound, being algebraically per-generation ÷ mean
+length:
+
+| model | ours (actual side) | canonical side | max(both) | naive bool/len |
+|---|---:|---:|---:|---:|
+| GPT-2 | **1.66%** | 1.36% | 1.77% | 0.33% |
+| Llama-3.2-1B | **0.96%** | 1.08% | 1.22% | 0.17% |
+| Llama-3.1-8B | **0.26%** | 0.30% | 0.34% | 0.08% |
+
+**Both metrics, and the identity that reconciles them.** Reporting the
+sequence-level number alongside is a useful cross-check, because the two are
+related exactly by
+
+```
+per_token = per_generation × (mean affected tokens per non-canonical generation)
+                           ÷ (mean tokens per generation)
+```
+
+Verified to hold to floating point for all ten models measured
+(`test_per_token_identity` in `tests/`):
+
+| model | per-generation | mean len | affected/non-canon gen | per-token |
+|---|---:|---:|---:|---:|
+| GPT-2 | 60% | 183 | 5.0 | 1.66% |
+| Llama-3.2-1B | 29% | 170 | 5.5 | 0.96% |
+| Qwen2.5-1.5B | 16% | 184 | 2.7 | 0.24% |
+| Gemma-2-2b | 15% | 167 | 2.6 | 0.24% |
+| Llama-3.2-3B | 22% | 180 | 4.2 | 0.52% |
+| Llama-3.1-8B | 15% | 182 | 3.2 | 0.26% |
+| gpt-oss-20b | 3% | 196 | 2.0 | 0.03% |
+| Gemma-1-2B-it | 25% | 142 | 3.5 | 0.62% |
+| Gemma-3-4B-it | 3% | 180 | 2.5 | 0.04% |
+| Llama-2-7B-chat | 6% | 182 | 3.1 | 0.10% |
+
+The middle column is the interesting one: a non-canonical generation carries
+**2–5.5 affected tokens**, not one. That is why per-generation over-states and
+the naive division under-states — a single flag stands in for a small cluster of
+tokens, and the cluster size varies by model (GPT-2 5.0, gpt-oss-20b 2.0).
 
 **Metric note.** The **per-token** rate is primary. BPE is *non-recovering*
 (Chatzi et al.): once a sequence goes non-canonical, every extension of it stays

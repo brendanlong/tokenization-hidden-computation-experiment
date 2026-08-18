@@ -26,6 +26,18 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from common.gpu import resolve_device
 
+# The seven per-model record files published to the HF dataset, in the order
+# they appear in the writeup's rate table.
+PUBLISHED_RECORD_FILES = (
+    "gpt2.jsonl",
+    "meta-llama_Llama-3.2-1B-Instruct.jsonl",
+    "Qwen_Qwen2.5-1.5B-Instruct.jsonl",
+    "google_gemma-2-2b.jsonl",
+    "meta-llama_Llama-3.2-3B-Instruct.jsonl",
+    "meta-llama_Llama-3.1-8B-Instruct.jsonl",
+    "openai_gpt-oss-20b.jsonl",
+)
+
 # Domain prompts. Arithmetic first (tightest match to the toy); then multilingual,
 # code, and English prose as rate baselines.
 PROMPTS: dict[str, list[str]] = {

@@ -98,8 +98,22 @@ Percentage of **emitted tokens** that are non-canonical:
 
 Three things stand out.
 
-**Language matters more than model.** English is near zero for every modern
-model; CJK reaches 5.2%. A single "multilingual" number would hide a ~8× spread within one model.
+**The prompt's language matters more than the model — but not for the reason
+the table suggests.** English is near zero for every modern model; CJK-prompted
+generations reach 5.2%. Those labels are the *prompt's* language, though, and
+the small models answer Russian and Japanese prompts mostly in English
+(Llama-3.2-1B emits 7% CJK characters for CJK prompts; Llama-3.1-8B emits 37%).
+Re-attributing each token to the script it is actually written in, **CJK tokens
+are among the lowest-rate tokens, not the highest** (0.12–1.07%).
+
+What drives the domain effect is the prompt pushing the model off-distribution.
+Holding script fixed at Latin, Llama-3.2-1B is non-canonical on 0.03% of Latin
+tokens written for an English prompt and **6.91%** of Latin tokens written for a
+CJK prompt — same script, same model, ~200×. So this is the tail-sampling
+mechanism again, reached from a different direction: unusual context flattens
+the next-token distribution, and non-canonical tokens live in the tail. Read the
+domain column as "how far outside its comfort zone the prompt puts the model",
+not as "how hard this script is to tokenize".
 
 **Temperature dominates everything.** **0.08%** of tokens under greedy
 decoding, **0.4–1.0%** at temperature 1.0, and **3–4%** by temperature 1.5 — a
