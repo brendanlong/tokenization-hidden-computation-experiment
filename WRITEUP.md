@@ -83,8 +83,8 @@ Detection is mechanical if you keep the IDs the model emitted: a generation is
 non-canonical iff `encode(decode(ids)) != ids`.
 
 Seven models, five tokenizer lineages, each at its as-released precision, pure
-sampling at temperature 1.0. Percentage of **emitted tokens** that are
-non-canonical:
+sampling at temperature 1.0, **200 max new tokens** (~180 emitted on average).
+Percentage of **emitted tokens** that are non-canonical:
 
 | model | english | code | ml-Latin | ml-Cyrl | ml-CJK |
 |---|--:|--:|--:|--:|--:|
@@ -116,12 +116,27 @@ prompts). Temperature buys you roughly an order of magnitude, not immunity.
 
 ![Non-canonical rate vs temperature](figures/phase2_temperature.png)
 
-**It falls with scale.** Within the Llama family — tokenizer *and* precision held
-fixed, so this is a model effect — CJK drops **5.20% → 2.93% → 1.21%** from
-1B → 3B → 8B. gpt-oss-20b, the largest we tested, is the most canonical of all.
-**The problem is shrinking on its own.**
+**It falls with scale.** Holding tokenizer *and* precision fixed —
+Llama-3.2-1B → Llama-3.2-3B → Llama-3.1-8B — CJK drops **5.20% → 2.93% →
+1.21%**, and every other domain is monotone too. Pooling all domains, the trend
+holds across families but noisily: GPT-2 1.66%, Llama-3.2-1B 0.96%,
+Qwen2.5-1.5B 0.24%, Gemma-2-2b 0.24%, Llama-3.2-3B 0.52%, Llama-3.1-8B 0.26%,
+gpt-oss-20b 0.03%. Smallest to largest is 55×, but the middle isn't ordered, so
+the within-family ladder is the claim we'd defend. **The problem is shrinking on
+its own.**
 
 ![Non-canonical generation falls with scale](figures/phase2_scale.png)
+
+**Report the length, and report per-token.** The per-*generation* rate — "did
+this sample contain a non-canonical span?" — is a strong function of how long
+you sampled: truncating our generations to 32/64/128/200 tokens moves GPT-2 from
+20% to 64% while its per-token rate stays at ~1.6%. That follows from BPE being
+non-recovering: once a sequence goes off-canonical, every extension stays
+off-canonical, so the sequence-level flag only accumulates and saturates at
+100%. **A sequence-level rate quoted without its length can't be interpreted,
+and two such rates at different lengths can't be compared.**
+
+![Per-generation rises with length; per-token does not](figures/phase2_length.png)
 
 ## 3. But you can prompt for it
 
