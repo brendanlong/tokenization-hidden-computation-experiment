@@ -169,6 +169,18 @@ sweeps) — a CoT step must compute a digit and expose its outgoing carry, wanti
 (Xenomirant & Sami Wolf, LessWrong, 17 Aug 2026) surveys this area from an
 alignment perspective. Assessment: **not scooped**, but a close neighbour.
 
+> **Posted a summary comment on that post, 17 Aug 2026:**
+> <https://www.lesswrong.com/posts/osWWL4yfentdhX9Q7/weird-re-tokenization-symmetries-and-compression-research?commentId=siCkKxAkPCZBmuCEo>
+>
+> Covers the toy (a transcript that appears to show one-step 3-digit addition
+> from a model too small to do it), the wild rates falling with scale, and the
+> prompted-induction result, and links the public repo. Flags two planned
+> follow-ups: a harder search for prompts that induce non-canonical output
+> (including on larger models), and training a model to hide computation via RL
+> against a monitor that reads the **re-tokenized** text. Watch the thread for
+> replies from the authors — their agenda names *writer invariance* as an open
+> question, which §3 partly answers.
+
 - It is a *survey + agenda*, not a results post.
 - **Overlaps**: wild rates (well covered by the literature it cites — Geh et al.
   2025 on canonicity vs generation length, plus Chatzi and Vieira which we
@@ -231,18 +243,68 @@ tokenizer, controlled harness, temp 1.0, per-token rate):
 |---|---:|---:|---:|---:|---:|---:|
 | Llama-3.2-**1B** | 0.03% | 0.12% | 0.35% | 1.28% | 4.06% | 5.20% |
 | Llama-3.2-**3B** | 0.00% | 0.08% | 0.05% | 0.99% | 1.98% | 2.93% |
-| Llama-3.1-**8B** | 0.00% | 0.07% | 0.11% | 0.31% | 1.47% | 1.38% |
+| Llama-3.1-**8B** | 0.03% | 0.03% | 0.03% | 0.42% | 1.31% | 1.21% |
 
-Essentially **monotone decreasing in scale** — CJK falls 3.8×, Latin 4.1×,
-Cyrillic 2.8× from 1B to 8B (the one exception, code 3B < 8B, is 0.05% vs 0.11%,
-both negligible). Holding the tokenizer fixed isolates this as a *model* effect,
-consistent with the tail-sampling mechanism: better-trained models concentrate
-more mass on the canonical continuation, leaving less tail to sample from.
+<sub>The 8B row was stale until 2026-08-18 (it read 0.00 / 0.07 / 0.11 / 0.31 /
+1.47 / 1.38, from a pre-fp32 run). Every cell above is now recomputed from the
+published token-ID artifacts and agrees with the FINAL table below.</sub>
+
+**Monotone decreasing in scale in every domain** — CJK falls 4.3×, Cyrillic
+3.1×, Latin 3.0×, code 12× from 1B to 8B. (The previously noted "one exception,
+code 3B < 8B" was an artifact of the stale row; the true code trend is
+0.35% → 0.05% → 0.03%.) Holding the tokenizer *and* the precision fixed isolates
+this as a *model* effect, consistent with the tail-sampling mechanism:
+better-trained models concentrate more mass on the canonical continuation,
+leaving less tail to sample from.
+
+**Across families the direction holds but is noisier** (all domains pooled,
+per-token): GPT-2 124M **1.66%**, Llama-3.2-1B **0.96%**, Qwen2.5-1.5B
+**0.24%**, Gemma-2-2b **0.24%**, Llama-3.2-3B **0.52%**, Llama-3.1-8B **0.26%**,
+gpt-oss-20b **0.03%**. Smallest and largest are 55× apart, but the middle is not
+ordered — Qwen-1.5B and Gemma-2b both sit below Llama-3B. So the *controlled*
+claim is the within-family ladder; the cross-family version is a trend, not a
+law. Both panels are in `figures/phase2_scale.png`.
+
+### Generation length is a first-order confound for sequence-level rates
+
+All rates here are at **200 `max_new_tokens`** (mean ~180 actually emitted).
+That matters, because the *per-generation* rate is a strong function of length
+while the per-token rate is not. Truncating the published generations to N
+tokens and re-running the round trip:
+
+| | N=32 | N=64 | N=128 | N=200 |
+|---|---:|---:|---:|---:|
+| GPT-2 — per-generation | 20% | 34% | 53% | **64%** |
+| GPT-2 — per-token | 1.58% | 1.57% | 1.72% | **1.67%** |
+| Llama-3.2-1B — per-generation | 7% | 18% | 27% | **33%** |
+| Llama-3.2-1B — per-token | 0.52% | 0.88% | 0.94% | **1.05%** |
+| Qwen2.5-1.5B — per-generation | 3% | 6% | 10% | **16%** |
+| Qwen2.5-1.5B — per-token | 0.23% | 0.25% | 0.20% | **0.21%** |
+
+Per-generation rises ~3× over this range and saturates at 100%; per-token is
+roughly flat. This follows from BPE being **non-recovering** (Chatzi et al.):
+once a sequence goes off-canonical every extension of it stays off-canonical, so
+the sequence-level flag can only accumulate. **A sequence-level rate quoted
+without its length is therefore uninterpretable**, and two such rates at
+different lengths are not comparable. Figure: `figures/phase2_length.png`.
 
 This **contrasts with Vieira et al. (ICML 2025)**, who report non-monotone
 scaling (their Llama-3.1-8B worse than Llama-3.2-3B). The setups differ — they
 measure unconditional canonicality at 1024 tokens, we measure prompted
 generation at 200 — so this is a difference to flag rather than a refutation.
+
+It also **contrasts with fig. 2 of the "Weird Re-Tokenization" agenda post**,
+which reports sequence-level non-canonicality *falling* with sampled
+continuation length (e.g. Gemma-1-2B from ~90% at 32 tokens to ~0% at 1024).
+Ours rises with length for every model, which is the direction non-recovering
+BPE requires. We have not been able to reconcile the two: their y-axis is
+"percent of non-canonical token sequences", which should be monotonically
+non-decreasing in length under the same definition we use, so the difference is
+likely a different quantity rather than a different finding. Worth resolving
+before either number is cited — flagged in the comment thread.
+Their model set is also not a scale ladder (Mamba-130M, Gemma-1-2B, Gemma-3-4B,
+Llama-2-7B, Qwen3-30B-A3B span four architectures and several generations), so
+their size ordering is confounded with training recipe in a way ours is not.
 
 **FINAL cross-family table — 7 models, as-released precision** (`--dtype auto`,
 i.e. how each model is normally run), pure sampling at temp 1.0, per-token rate.

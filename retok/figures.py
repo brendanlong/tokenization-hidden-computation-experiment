@@ -130,6 +130,9 @@ PHASE2_RATES = {  # model -> per-domain % of TOKENS non-canonical ; color
 }
 
 # Scale ladder: Llama family, identical tokenizer. Rate falls with size.
+# All rates below are per-TOKEN at 200 max_new_tokens (mean ~180 emitted),
+# temp 1.0, pure sampling, as-released dtype. Per-generation rates are NOT
+# comparable across lengths — see plot_length_dependence.
 LADDER_LABELS = ["Llama-3.2-1B", "Llama-3.2-3B", "Llama-3.1-8B"]
 LADDER_X = [1, 3, 8]
 LADDER = {
@@ -140,8 +143,23 @@ LADDER = {
 }
 
 
+# Overall per-token rate (all domains pooled) vs parameter count, every model
+# measured. Recomputed from the published artifacts 2026-08-18.
+# (name, params B, per-token %, colour, label offset in points) — Qwen and
+# Gemma sit almost on top of each other, hence the explicit offsets.
+ALL_MODELS = [
+    ("GPT-2", 0.124, 1.66, "#E69F00", (0, 9)),
+    ("Llama-3.2-1B", 1.0, 0.96, "#0072B2", (0, 9)),
+    ("Qwen2.5-1.5B", 1.5, 0.24, "#009E73", (-16, -14)),
+    ("Gemma-2-2b", 2.0, 0.24, "#CC79A7", (20, 7)),
+    ("Llama-3.2-3B", 3.0, 0.52, "#0072B2", (6, 9)),
+    ("Llama-3.1-8B", 8.0, 0.26, "#0072B2", (0, 9)),
+    ("gpt-oss-20b", 20.0, 0.03, "#333333", (0, 9)),
+]
+
+
 def plot_scale_ladder(out_path: Path) -> None:
-    fig, ax = plt.subplots(figsize=(6.8, 4.2))
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(11.4, 4.3))
     ax.set_facecolor(SURFACE)
     fig.patch.set_facecolor("white")
     # CJK and Cyrillic converge at 8B, so label at the LEFT end where the
@@ -169,14 +187,16 @@ def plot_scale_ladder(out_path: Path) -> None:
         )
     ax.set_xscale("log", base=2)
     ax.set_xticks(LADDER_X)
-    ax.set_xticklabels(["1B", "3B", "8B"])
+    ax.set_xticklabels(
+        ["Llama-3.2\n1B", "Llama-3.2\n3B", "Llama-3.1\n8B"], fontsize=8.5
+    )
     ax.set_xlim(0.42, 10)
     ax.set_ylim(0, 5.8)
-    ax.set_xlabel("model size (Llama family, identical tokenizer)")
+    ax.set_xlabel("model size")
     ax.set_ylabel("emitted tokens that are non-canonical (%)")
     ax.set_title(
-        "Non-canonical generation falls with scale\n"
-        "Same tokenizer throughout, so this is a model effect",
+        "Controlled: one tokenizer, one family\n"
+        "Monotone in every domain, so this is a model effect",
         fontsize=10.5,
         loc="left",
     )
@@ -185,6 +205,48 @@ def plot_scale_ladder(out_path: Path) -> None:
         ax.spines[sp].set_visible(False)
     for sp in ("left", "bottom"):
         ax.spines[sp].set_color("#cccccc")
+    # Right panel: every model measured, so the trend is not just one family.
+    for name, params, rate, colour, offset in ALL_MODELS:
+        ax2.scatter(params, rate, s=58, color=colour, zorder=3)
+        ax2.annotate(
+            name,
+            xy=(params, rate),
+            xytext=offset,
+            textcoords="offset points",
+            ha="center",
+            fontsize=8,
+            color=colour,
+        )
+    llama = [(p, r) for n, p, r, _, _ in ALL_MODELS if n.startswith("Llama")]
+    ax2.plot(
+        *zip(*llama, strict=True), color="#0072B2", linewidth=1.4, alpha=0.5, zorder=2
+    )
+    ax2.set_xscale("log")
+    ax2.set_xticks([0.124, 1, 3, 8, 20])
+    ax2.set_xticklabels(["124M", "1B", "3B", "8B", "20B"], fontsize=8.5)
+    ax2.set_xlim(0.08, 34)
+    ax2.set_ylim(-0.12, 2.1)
+    ax2.set_xlabel("parameters")
+    ax2.set_ylabel("all domains pooled (%)")
+    ax2.set_title(
+        "All seven models, four tokenizer lineages\n"
+        "Same direction, but noisier across families",
+        fontsize=10.5,
+        loc="left",
+    )
+    ax2.grid(True, color="#e8e8e6", linewidth=0.8, zorder=0)
+    for sp in ("top", "right"):
+        ax2.spines[sp].set_visible(False)
+    for sp in ("left", "bottom"):
+        ax2.spines[sp].set_color("#cccccc")
+    fig.suptitle(
+        "Non-canonical generation falls with scale  "
+        "(per-token rate, 200 max new tokens, temp 1.0)",
+        fontsize=11.5,
+        x=0.01,
+        ha="left",
+        y=1.04,
+    )
     fig.tight_layout()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
@@ -254,6 +316,77 @@ def plot_temperature(out_path: Path) -> None:
         ax.spines[spine].set_visible(False)
     for spine in ("left", "bottom"):
         ax.spines[spine].set_color("#cccccc")
+    fig.tight_layout()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    print(f"Wrote {out_path}")
+
+
+# Length dependence, computed by truncating the published generations to N
+# tokens and re-running the round trip. Per-GENERATION rises steeply with N
+# (BPE is non-recovering: once a sequence goes off-canonical every extension
+# stays off-canonical, so the flag can only accumulate). Per-TOKEN is roughly
+# flat, which is why we report it. Recomputed 2026-08-18.
+LENGTH_N = [32, 64, 128, 200]
+LENGTH_SERIES = {
+    "GPT-2": ([20, 34, 53, 64], [1.58, 1.57, 1.72, 1.67], "#E69F00"),
+    "Llama-3.2-1B": ([7, 18, 27, 33], [0.52, 0.88, 0.94, 1.05], "#0072B2"),
+    "Qwen2.5-1.5B": ([3, 6, 10, 16], [0.23, 0.25, 0.20, 0.21], "#009E73"),
+}
+
+
+def plot_length_dependence(out_path: Path) -> None:
+    """Why we report per-token: the per-generation rate is a length artifact."""
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(11.0, 4.0))
+    for axis in (ax, ax2):
+        axis.set_facecolor(SURFACE)
+        axis.grid(True, color="#e8e8e6", linewidth=0.8, zorder=0)
+        axis.set_xscale("log", base=2)
+        axis.set_xticks(LENGTH_N)
+        axis.set_xticklabels([str(n) for n in LENGTH_N])
+        axis.set_xlabel("generated tokens kept")
+        for sp in ("top", "right"):
+            axis.spines[sp].set_visible(False)
+        for sp in ("left", "bottom"):
+            axis.spines[sp].set_color("#cccccc")
+    fig.patch.set_facecolor("white")
+    for name, (pergen, pertok, colour) in LENGTH_SERIES.items():
+        ax.plot(
+            LENGTH_N,
+            pergen,
+            marker="o",
+            markersize=6,
+            linewidth=2.0,
+            color=colour,
+            label=name,
+            zorder=3,
+        )
+        ax2.plot(
+            LENGTH_N,
+            pertok,
+            marker="o",
+            markersize=6,
+            linewidth=2.0,
+            color=colour,
+            label=name,
+            zorder=3,
+        )
+    ax.set_ylim(0, 70)
+    ax.set_ylabel("generations with >=1 non-canonical span (%)")
+    ax.set_title(
+        "Per-generation: rises with length\n"
+        "Saturates at 100%, so it is not comparable across lengths",
+        fontsize=10.5,
+        loc="left",
+    )
+    ax.legend(loc="upper left", framealpha=0.92, edgecolor="#dddddd", fontsize=9)
+    ax2.set_ylim(0, 2.1)
+    ax2.set_ylabel("emitted tokens that are non-canonical (%)")
+    ax2.set_title(
+        "Per-token: roughly flat\nThe length-invariant quantity, and what we report",
+        fontsize=10.5,
+        loc="left",
+    )
     fig.tight_layout()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
@@ -594,6 +727,7 @@ def main() -> None:
     plot_temperature(figdir / "phase2_temperature.png")
     plot_decay(figdir / "phase2_decay.png")
     plot_scale_ladder(figdir / "phase2_scale.png")
+    plot_length_dependence(figdir / "phase2_length.png")
 
 
 if __name__ == "__main__":
