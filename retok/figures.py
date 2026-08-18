@@ -130,123 +130,129 @@ PHASE2_RATES = {  # model -> per-domain % of TOKENS non-canonical ; color
 }
 
 # Scale ladder: Llama family, identical tokenizer. Rate falls with size.
-# All rates below are per-TOKEN at 200 max_new_tokens (mean ~180 emitted),
-# temp 1.0, pure sampling, as-released dtype. Per-generation rates are NOT
-# comparable across lengths — see plot_length_dependence.
-LADDER_LABELS = ["Llama-3.2-1B", "Llama-3.2-3B", "Llama-3.1-8B"]
-LADDER_X = [1, 3, 8]
-LADDER = {
-    "multiling. CJK": ([5.20, 2.93, 1.21], "#0072B2"),
-    "multiling. Cyrillic": ([4.06, 1.98, 1.31], "#56B4E9"),
-    "multiling. Latin": ([1.28, 0.99, 0.42], "#009E73"),
-    "code": ([0.35, 0.05, 0.03], "#E69F00"),
+# Scale, measured on LATIN-SCRIPT TOKENS ONLY (per-token, 200 max new tokens,
+# temp 1.0, as-released dtype). Latin is the only slice comparable across every
+# model: the domain columns are keyed by the PROMPT's language, and the smaller
+# models answer non-English prompts in English, so their "CJK"/"Cyrillic" cells
+# largely measure Latin text anyway. Recomputed from the published artifacts
+# 2026-08-18 via phase2_script.py.
+#
+# (name, params B, Latin rate %, english-prompt %, non-english-prompt %, colour)
+SCALE_MODELS = [
+    ("GPT-2", 0.124, 1.92, 1.00, 2.06, "#E69F00"),
+    ("Llama-3.2-1B", 1.24, 1.33, 0.03, 1.65, "#0072B2"),
+    ("Qwen2.5-1.5B", 1.54, 0.28, 0.00, 0.35, "#009E73"),
+    ("Gemma-1-2B", 2.51, 0.54, 0.00, 0.74, "#CC79A7"),
+    ("Gemma-2-2b", 2.61, 0.24, 0.05, 0.27, "#CC79A7"),
+    ("Llama-3.2-3B", 3.21, 0.72, 0.00, 0.88, "#0072B2"),
+    ("Gemma-3-4B", 4.30, 0.07, 0.00, 0.09, "#CC79A7"),
+    ("Llama-2-7B", 6.74, 0.10, 0.00, 0.13, "#999999"),
+    ("Llama-3.1-8B", 8.03, 0.30, 0.03, 0.36, "#0072B2"),
+    ("gpt-oss-20b", 20.9, 0.03, 0.00, 0.04, "#333333"),
+]
+# Label offsets (points) so the 1.5-4B cluster does not overlap.
+SCALE_LABEL_OFFSETS = {
+    "Qwen2.5-1.5B": (-2, -16),
+    "Gemma-1-2B": (-16, 8),
+    "Gemma-2-2b": (-30, -6),
+    "Llama-3.2-3B": (16, 6),
+    "Gemma-3-4B": (26, 2),
+    "Llama-2-7B": (4, -17),
+    "Llama-3.1-8B": (18, 2),
+}
+# Within-family ladders: the controlled comparisons (tokenizer held fixed).
+FAMILY_LADDERS = {
+    "Llama-3.x (1B/3B/8B)": (
+        ["Llama-3.2-1B", "Llama-3.2-3B", "Llama-3.1-8B"],
+        "#0072B2",
+    ),
+    "Gemma 1 \u2192 2 \u2192 3": (
+        ["Gemma-1-2B", "Gemma-2-2b", "Gemma-3-4B"],
+        "#CC79A7",
+    ),
 }
 
 
-# Overall per-token rate (all domains pooled) vs parameter count, every model
-# measured. Recomputed from the published artifacts 2026-08-18.
-# (name, params B, per-token %, colour, label offset in points) — Qwen and
-# Gemma sit almost on top of each other, hence the explicit offsets.
-ALL_MODELS = [
-    ("GPT-2", 0.124, 1.66, "#E69F00", (0, 9)),
-    ("Llama-3.2-1B", 1.0, 0.96, "#0072B2", (0, 9)),
-    ("Qwen2.5-1.5B", 1.5, 0.24, "#009E73", (-16, -14)),
-    ("Gemma-2-2b", 2.0, 0.24, "#CC79A7", (20, 7)),
-    ("Llama-3.2-3B", 3.0, 0.52, "#0072B2", (6, 9)),
-    ("Llama-3.1-8B", 8.0, 0.26, "#0072B2", (0, 9)),
-    ("gpt-oss-20b", 20.0, 0.03, "#333333", (0, 9)),
-]
-
-
 def plot_scale_ladder(out_path: Path) -> None:
-    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(11.4, 4.3))
-    ax.set_facecolor(SURFACE)
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(11.8, 4.4))
+    for axis in (ax, ax2):
+        axis.set_facecolor(SURFACE)
+        axis.grid(True, color="#e8e8e6", linewidth=0.8, zorder=0)
+        for sp in ("top", "right"):
+            axis.spines[sp].set_visible(False)
+        for sp in ("left", "bottom"):
+            axis.spines[sp].set_color("#cccccc")
     fig.patch.set_facecolor("white")
-    # CJK and Cyrillic converge at 8B, so label at the LEFT end where the
-    # series are well separated, and keep a legend for redundancy.
-    for label, (ys, color) in LADDER.items():
-        ax.plot(
-            LADDER_X,
-            ys,
-            marker="o",
-            markersize=7,
-            linewidth=2.0,
-            color=color,
-            label=label,
-            zorder=3,
-        )
+
+    by_name = {m[0]: m for m in SCALE_MODELS}
+    for name, params, rate, _eng, _non, colour in SCALE_MODELS:
+        ax.scatter(params, rate, s=62, color=colour, zorder=3)
         ax.annotate(
-            label,
-            xy=(LADDER_X[0], ys[0]),
-            xytext=(-8, 0),
-            textcoords="offset points",
-            va="center",
-            ha="right",
-            fontsize=8.5,
-            color=color,
-        )
-    ax.set_xscale("log", base=2)
-    ax.set_xticks(LADDER_X)
-    ax.set_xticklabels(
-        ["Llama-3.2\n1B", "Llama-3.2\n3B", "Llama-3.1\n8B"], fontsize=8.5
-    )
-    ax.set_xlim(0.42, 10)
-    ax.set_ylim(0, 5.8)
-    ax.set_xlabel("model size")
-    ax.set_ylabel("emitted tokens that are non-canonical (%)")
-    ax.set_title(
-        "Controlled: one tokenizer, one family\n"
-        "Monotone in every domain, so this is a model effect",
-        fontsize=10.5,
-        loc="left",
-    )
-    ax.grid(True, color="#e8e8e6", linewidth=0.8, zorder=0)
-    for sp in ("top", "right"):
-        ax.spines[sp].set_visible(False)
-    for sp in ("left", "bottom"):
-        ax.spines[sp].set_color("#cccccc")
-    # Right panel: every model measured, so the trend is not just one family.
-    for name, params, rate, colour, offset in ALL_MODELS:
-        ax2.scatter(params, rate, s=58, color=colour, zorder=3)
-        ax2.annotate(
             name,
             xy=(params, rate),
-            xytext=offset,
+            xytext=SCALE_LABEL_OFFSETS.get(name, (0, 9)),
             textcoords="offset points",
             ha="center",
             fontsize=8,
             color=colour,
         )
-    llama = [(p, r) for n, p, r, _, _ in ALL_MODELS if n.startswith("Llama")]
-    ax2.plot(
-        *zip(*llama, strict=True), color="#0072B2", linewidth=1.4, alpha=0.5, zorder=2
-    )
-    ax2.set_xscale("log")
-    ax2.set_xticks([0.124, 1, 3, 8, 20])
-    ax2.set_xticklabels(["124M", "1B", "3B", "8B", "20B"], fontsize=8.5)
-    ax2.set_xlim(0.08, 34)
-    ax2.set_ylim(-0.12, 2.1)
-    ax2.set_xlabel("parameters")
-    ax2.set_ylabel("all domains pooled (%)")
-    ax2.set_title(
-        "All seven models, four tokenizer lineages\n"
-        "Same direction, but noisier across families",
+    for label, (names, colour) in FAMILY_LADDERS.items():
+        pts = [(by_name[n][1], by_name[n][2]) for n in names]
+        ax.plot(
+            *zip(*pts, strict=True),
+            color=colour,
+            linewidth=1.6,
+            alpha=0.55,
+            zorder=2,
+            label=label,
+        )
+    ax.set_xscale("log")
+    ax.set_xticks([0.124, 1, 3, 8, 20])
+    ax.set_xticklabels(["124M", "1B", "3B", "8B", "20B"], fontsize=8.5)
+    ax.set_xlim(0.08, 40)
+    ax.set_ylim(-0.14, 2.4)
+    ax.set_xlabel("parameters")
+    ax.set_ylabel("Latin-script tokens that are non-canonical (%)")
+    ax.legend(loc="upper right", framealpha=0.92, edgecolor="#dddddd", fontsize=8.5)
+    ax.set_title(
+        "Falls with scale within a family, noisy across families\n"
+        "Both ladders monotone; Llama-2-7B and Llama-3.2-3B break the global trend",
         fontsize=10.5,
         loc="left",
     )
-    ax2.grid(True, color="#e8e8e6", linewidth=0.8, zorder=0)
-    for sp in ("top", "right"):
-        ax2.spines[sp].set_visible(False)
-    for sp in ("left", "bottom"):
-        ax2.spines[sp].set_color("#cccccc")
-    fig.suptitle(
-        "Non-canonical generation falls with scale  "
-        "(per-token rate, 200 max new tokens, temp 1.0)",
-        fontsize=11.5,
-        x=0.01,
-        ha="left",
-        y=1.04,
+
+    # Right: where the signal is. English is at the floor for every model after
+    # GPT-2, so the rate is carried by off-distribution contexts.
+    names = [m[0] for m in SCALE_MODELS]
+    ypos = list(range(len(names)))[::-1]
+    ax2.barh(
+        [y + 0.19 for y in ypos],
+        [m[4] for m in SCALE_MODELS],
+        height=0.36,
+        color="#D55E00",
+        label="non-English prompt",
+        zorder=3,
     )
+    ax2.barh(
+        [y - 0.19 for y in ypos],
+        [m[3] for m in SCALE_MODELS],
+        height=0.36,
+        color="#56B4E9",
+        label="English prompt",
+        zorder=3,
+    )
+    ax2.set_yticks(ypos)
+    ax2.set_yticklabels(names, fontsize=8.5)
+    ax2.set_xlabel("Latin-script tokens that are non-canonical (%)")
+    ax2.set_xlim(0, 2.25)
+    ax2.legend(loc="lower right", framealpha=0.92, edgecolor="#dddddd", fontsize=8.5)
+    ax2.set_title(
+        "Same tokens, split by what prompted them\n"
+        "English is ~0 after GPT-2 \u2014 the rate is off-distribution text",
+        fontsize=10.5,
+        loc="left",
+    )
+
     fig.tight_layout()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, dpi=150, bbox_inches="tight")
