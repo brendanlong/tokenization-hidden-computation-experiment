@@ -450,10 +450,12 @@ def plot_mechanism(out_path: Path) -> None:
     for t in ["5", "2", "1"]:
         _token_box(ax, x, 3.9, 0.52, t, BLUE)
         x += 0.61
+    answer_end = x
+    _token_box(ax, x, 3.9, 1.0, "<eos>", MUTED, fontsize=9.5)
     ax.annotate(
         "3 positions to probe\n(carry computed step by step)",
-        xy=(x - 0.3, 3.86),
-        xytext=(x + 0.35, 3.45),
+        xy=(answer_end - 0.3, 3.86),
+        xytext=(answer_end + 0.45, 3.35),
         ha="left",
         va="center",
         fontsize=9,
@@ -506,10 +508,12 @@ def plot_mechanism(out_path: Path) -> None:
         _token_box(ax, x, 1.1, w, t, colour, fontsize=9.5)
         x += w + 0.09
     _token_box(ax, x, 1.1, 1.0, "521", ORANGE)
+    merged_end = x + 1.0
+    _token_box(ax, x + 1.09, 1.1, 1.0, "<eos>", MUTED, fontsize=9.5)
     ax.annotate(
         "1 position — same string, different tokens",
-        xy=(x + 1.02, 1.31),
-        xytext=(x + 1.3, 1.31),
+        xy=(merged_end - 0.5, 1.64),
+        xytext=(merged_end + 1.55, 1.95),
         ha="left",
         va="center",
         fontsize=9,
