@@ -265,6 +265,51 @@ ordered — Qwen-1.5B and Gemma-2b both sit below Llama-3B. So the *controlled*
 claim is the within-family ladder; the cross-family version is a trend, not a
 law. Both panels are in `figures/phase2_scale.png`.
 
+### Scale, restated on Latin script (2026-08-18)
+
+The scale figure was per-prompt-domain, which the section below shows is
+confounded, and it omitted the three comparison models. Both fixed by measuring
+**Latin-script tokens only** — the one slice every model actually produces, and
+where n is largest (~21k–38k tokens per model). `figures/phase2_scale.png`.
+
+| model | params | Latin rate | english prompt | non-english prompt |
+|---|---:|---:|---:|---:|
+| GPT-2 | 0.12B | 1.92% | 1.00% | 2.06% |
+| Llama-3.2-1B | 1.24B | 1.33% | 0.03% | 1.65% |
+| Qwen2.5-1.5B | 1.54B | 0.28% | 0.00% | 0.35% |
+| Gemma-1-2B | 2.51B | 0.54% | 0.00% | 0.74% |
+| Gemma-2-2b | 2.61B | 0.24% | 0.05% | 0.27% |
+| Llama-3.2-3B | 3.21B | 0.72% | 0.00% | 0.88% |
+| Gemma-3-4B | 4.30B | 0.07% | 0.00% | 0.09% |
+| Llama-2-7B | 6.74B | 0.10% | 0.00% | 0.13% |
+| Llama-3.1-8B | 8.03B | 0.30% | 0.03% | 0.36% |
+| gpt-oss-20b | 20.9B | 0.03% | 0.00% | 0.04% |
+
+**Within-family it is monotone**, on two independent ladders: Llama-3.x
+1.33% → 0.72% → 0.30%, and Gemma generations 0.54% → 0.24% → 0.07%. The Gemma
+one is as much a *recency* ladder as a size one (2.5B → 2.6B → 4.3B), which
+suggests training recipe matters at least as much as parameter count.
+
+**Across families it is not a scaling law.** Llama-3.2-3B (0.72%) sits above
+Qwen2.5-1.5B (0.28%); Llama-2-7B (0.10%) sits below Llama-3.1-8B (0.30%). The
+endpoints span 64× (GPT-2 1.92% → gpt-oss-20b 0.03%) but the middle does not
+order. Report the within-family claim; do not draw a global trend line.
+
+**English-only is a floor, not an alternative.** Every model after GPT-2 is
+0.00–0.05% on Latin tokens written for English prompts, so that slice cannot
+discriminate between models — the entire signal lives in Latin tokens written in
+response to non-English prompts, which is the off-distribution mechanism again.
+This is why "restrict to English" is not the fix for the domain confound and
+"restrict to Latin" is.
+
+**Residual confound, not removable from this data.** Latin fixes *which script*
+is measured but not what the model chose to write in it. Llama-2-7B answers
+everything in English (10% in-script on Cyrillic prompts), so its Latin tokens
+are more routine text than Llama-3.1-8B's, which include code-switching around
+genuine Russian and Japanese output. That plausibly explains its position below
+the Llama-3.x line, and it means cross-family cells still are not fully
+like-for-like.
+
 ### Direct comparison: their models, our methodology (2026-08-18)
 
 The "Weird Re-Tokenization" agenda post's fig. 2 orders models the opposite way

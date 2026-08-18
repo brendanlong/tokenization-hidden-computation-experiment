@@ -11,7 +11,6 @@ This re-attributes every emitted token to the script of its own surface form and
 recomputes the rate per script, which is comparable across models. Run:
 
     uv run python -m retok.phase2_script --all-published
-    uv run python -m retok.phase2_script data/retok/artifacts/*.jsonl
 """
 
 from __future__ import annotations
@@ -115,12 +114,20 @@ def main() -> None:
     )
     args = parser.parse_args()
     if args.all_published:
-        # common.artifacts is the single source of truth for what is published
-        # and where; phase2_probe keeps its own copy for the monorepo, which has
-        # no HF resolver.
-        from common.artifacts import artifact_path, published_record_files
+        from huggingface_hub import hf_hub_download
 
-        paths = [Path(artifact_path(name)) for name in published_record_files()]
+        from retok.phase2_probe import PUBLISHED_RECORD_FILES
+
+        paths = [
+            Path(
+                hf_hub_download(
+                    "brendanlong/retok-noncanonical-tokenization",
+                    name,
+                    repo_type="dataset",
+                )
+            )
+            for name in PUBLISHED_RECORD_FILES
+        ]
     elif args.paths:
         paths = [Path(p) for p in args.paths]
     else:

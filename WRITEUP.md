@@ -130,14 +130,29 @@ prompts). Temperature buys you roughly an order of magnitude, not immunity.
 
 ![Non-canonical rate vs temperature](figures/phase2_temperature.png)
 
-**It falls with scale.** Holding tokenizer *and* precision fixed —
-Llama-3.2-1B → Llama-3.2-3B → Llama-3.1-8B — CJK drops **5.20% → 2.93% →
-1.21%**, and every other domain is monotone too. Pooling all domains, the trend
-holds across families but noisily: GPT-2 1.66%, Llama-3.2-1B 0.96%,
-Qwen2.5-1.5B 0.24%, Gemma-2-2b 0.24%, Llama-3.2-3B 0.52%, Llama-3.1-8B 0.26%,
-gpt-oss-20b 0.03%. Smallest to largest is 55×, but the middle isn't ordered, so
-the within-family ladder is the claim we'd defend. **The problem is shrinking on
-its own.**
+**It falls with scale — within a family.** Measure this on **Latin-script
+tokens**: it is the only slice every model actually produces, since the smaller
+ones answer non-English prompts in English and their "CJK"/"Cyrillic" columns
+therefore mostly describe Latin text anyway. Two family ladders, both monotone:
+
+| Llama-3.x | | Gemma generations | |
+|---|--:|---|--:|
+| Llama-3.2-1B | 1.33% | Gemma-1-2B | 0.54% |
+| Llama-3.2-3B | 0.72% | Gemma-2-2b | 0.24% |
+| Llama-3.1-8B | 0.30% | Gemma-3-4B | 0.07% |
+
+Across families it is noisier and not a scaling law: Llama-3.2-3B (0.72%) sits
+above Qwen2.5-1.5B (0.28%), and Llama-2-7B (0.10%) below Llama-3.1-8B (0.30%).
+GPT-2 is the extreme at 1.92% and gpt-oss-20b at 0.03% — 64× across the range,
+but the middle does not order cleanly. **The defensible claim is within-family
+improvement, not a global law**, and the Gemma ladder suggests it tracks model
+*generation* as much as parameter count.
+
+One caveat we cannot remove: restricting to Latin fixes *which script* is
+measured, but not what the model chose to write in it. Llama-2-7B answers
+everything in English, so its Latin tokens are more "comfortable" text than
+Llama-3.1-8B's, which include code-switching around genuine Russian and
+Japanese. That plausibly explains its position.
 
 ![Non-canonical generation falls with scale](figures/phase2_scale.png)
 
@@ -340,10 +355,10 @@ a HuggingFace dataset:
 Generation needs a GPU; **analysis doesn't**:
 
 ```bash
-uv run python -m retok.phase2_verify --all-published
+huggingface-cli download brendanlong/retok-noncanonical-tokenization \
+    --repo-type dataset --local-dir data/retok/artifacts
+uv run python -m retok.phase2_verify data/retok/artifacts/*.jsonl
 ```
-
-(or `bash scripts/reproduce_analyses.sh` for every table at once.)
 
 That recomputes canonicality from the raw IDs rather than trusting our stored
 flags, so every rate above is checkable independently of our generation step. It
