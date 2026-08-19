@@ -329,10 +329,14 @@ def plot_temperature(out_path: Path) -> None:
 
 
 # Length dependence, computed by truncating the published generations to N
-# tokens and re-running the round trip. Per-GENERATION rises steeply with N
-# (BPE is non-recovering: once a sequence goes off-canonical every extension
-# stays off-canonical, so the flag can only accumulate). Per-TOKEN is roughly
-# flat, which is why we report it. Recomputed 2026-08-18.
+# tokens and re-running the round trip. Only generations with >= N tokens are
+# kept at each N (so every column compares sequences of the same length), and
+# measurability (the U+FFFD / non-NFC exclusions) is re-derived on the
+# truncated text rather than read from the stored flag. Per-GENERATION rises
+# steeply with N (BPE is non-recovering: once a sequence goes off-canonical
+# every extension stays off-canonical, so the flag can only accumulate).
+# Per-TOKEN is roughly flat, which is why we report it. Recomputed 2026-08-18;
+# every cell re-verified against the published artifacts 2026-08-18.
 LENGTH_N = [32, 64, 128, 200]
 LENGTH_SERIES = {
     "GPT-2": ([20, 34, 53, 64], [1.58, 1.57, 1.72, 1.67], "#E69F00"),
@@ -483,7 +487,7 @@ def plot_decay(out_path: Path) -> None:
     )
     ax1.set_yscale("log")
     ax1.set_ylabel("median next-token KL (nats)")
-    ax1.set_title("Magnitude dilutes ~100x by 16 tokens", fontsize=10, loc="left")
+    ax1.set_title("Magnitude dilutes ~57x by 16 tokens", fontsize=10, loc="left")
 
     ax2.plot(
         DECAY_D,

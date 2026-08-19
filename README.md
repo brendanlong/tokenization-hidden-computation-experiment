@@ -24,13 +24,13 @@ adversary required.
    merged token. The stored transcript shows it doing in one decode step what it
    actually needed three for. Even absent any hidden computation, the round trip
    perturbs interpretability: next-token distributions at a non-canonical span
-   boundary diverge (median KL 0.227, top-1 flips 50%), decaying ~100× within 16
+   boundary diverge (median KL 0.227, top-1 flips 50%), decaying ~57× within 16
    tokens (and ~110× by 64) but with the flip rate plateauing near 10%.
 
 2. **In-the-wild rates are low, and fall with scale.** Across seven models and
    five tokenizer lineages at as-released precision, the share of emitted tokens
    that are non-canonical runs 0–5%, dominated by language (English ≈ 0%, CJK up
-   to 5.2%) and by temperature (**0% under greedy decoding**, 0.4–1.0% at
+   to 5.2%) and by temperature (**0.08% under greedy decoding**, 0.4–1.0% at
    temperature 1.0, 3–4% at 1.5). Within the Llama family, CJK drops 5.20% → 2.93% → 1.21%
    from 1B → 3B → 8B.
 
@@ -97,7 +97,7 @@ skypilot/reproduce.yaml generic cloud-GPU task
 
 ```bash
 uv sync
-uv run pytest          # 36 CPU tests, ~3s
+uv run pytest          # 38 CPU tests, ~3s
 ```
 
 Python ≥3.12. The toy model trains on CPU or any GPU (it is ~25k parameters);

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Reproduce every table in WRITEUP.md from published artifacts.
 #
-# No GPU, no wandb account. Downloads ~23 MB of checkpoints and ~6 MB of
+# No GPU, no wandb account. Downloads ~0.3 MB of checkpoints and ~6 MB of
 # generation records from the HuggingFace dataset (cached by huggingface_hub,
 # so re-runs are offline).
 #
