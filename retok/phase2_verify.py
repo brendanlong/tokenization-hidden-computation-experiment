@@ -122,16 +122,14 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    paths: list[Path] = []
     if args.all_published:
-        paths = [Path(artifact_path(name)) for name in published_record_files()]
-    elif args.paths:
-        paths = [
-            Path(artifact_path(p.removeprefix("hf:")))
-            if p.startswith("hf:")
-            else Path(p)
-            for p in args.paths
-        ]
-    else:
+        paths += [Path(artifact_path(name)) for name in published_record_files()]
+    paths += [
+        Path(artifact_path(p.removeprefix("hf:"))) if p.startswith("hf:") else Path(p)
+        for p in args.paths
+    ]
+    if not paths:
         parser.error("pass at least one path, or --all-published")
     raise SystemExit(verify(paths))
 

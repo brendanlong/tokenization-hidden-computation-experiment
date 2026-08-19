@@ -65,6 +65,11 @@ repetition_penalty=1.0` — pinned explicitly, not inherited from each repo's
 |---|---|
 | `<model>.jsonl` | per-generation records backing the rate table |
 | `induce_<model>.jsonl` | prompted-induction trials + matched controls |
+| `greedy/<model>.jsonl` | greedy-decoding (temperature 0) runs over the full prompt set |
+| `lw_comparison/<model>.jsonl` | the three "Weird Re-Tokenization" comparison models, our methodology |
+| `interp_<model>.jsonl` | boundary-divergence records (per-generation, with KL / next-token IDs at the first non-canonical boundary) |
+| `decay_<model>.jsonl` | contamination-decay records (per-generation, with KL / top-1 flip at each distance past the span) |
+| `temperature_<model>.jsonl` | temperature-sweep records (rate-table schema plus varying `temperature`) |
 | `checkpoints/retok-main-s{0,1,2}/final.pt` | the 3 main toy-model seeds (2 layers, dim 16) |
 | `checkpoints/retok-sweep-cot-d<N>/final.pt` | width sweep, CoT arm, dim ∈ {8,12,24,32,64} |
 | `checkpoints/retok-sweep-1step-d<N>/final.pt` | width sweep, one-step arm, dim ∈ {8,12,16,24,32,64} |
@@ -105,6 +110,13 @@ One JSON object per generation (`<model>.jsonl`):
 
 `induce_<model>.jsonl` holds the prompted-induction trials, with `probe`,
 `target`, `produced`, `induced`, `actual_tokens`, `canonical_tokens`.
+
+`interp_*.jsonl` adds a `boundary` object per generation (`region`, `kl`,
+`actual_next_id`, `canonical_next_id`, `pa_top1`, `pa_at_canon`);
+`decay_*.jsonl` adds `measurements` (per distance: `kl`, `flip`). The token-ID
+bookkeeping in both is recomputable on CPU (`--from-jsonl` in the matching
+module); the stored KL/probability values are what a GPU re-run would
+regenerate.
 
 ## Verifying
 
@@ -162,5 +174,5 @@ uv run python -m retok.phase2_verify *.jsonl
 
 ## Source
 
-Code, full run log and writeup: https://github.com/brendanlong/experiments
-(`retok/`).
+Code, full run log and writeup:
+https://github.com/brendanlong/tokenization-hidden-computation-experiment

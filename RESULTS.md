@@ -19,6 +19,15 @@
 > The private S3 bucket is not public; the HF dataset above is the public
 > equivalent. wandb run IDs are in project `retok` under the `brendanlong`
 > entity. Reproduction entry points are in [`scripts/`](scripts/).
+>
+> **Known erratum (annotation, 2026-08-19 — the log body below is left
+> verbatim).** The induction section's compliance rate "(42% / 15%)" does not
+> match the published artifacts: recomputed from the `induce_*.jsonl` records
+> it is 41/80 (51%) for Llama-3.2-1B and 8/80 (10%) for Qwen2.5-1.5B, most
+> likely a number written from an earlier, smaller run and never updated when
+> the final 80-trial artifacts were generated. WRITEUP.md §3 carries the
+> correct numbers; the headline induction results (38/41, 6/8, the controls,
+> and the pooled Fisher test) recompute exactly.
 
 
 **Question.** Can a model's actual token stream differ from the canonical

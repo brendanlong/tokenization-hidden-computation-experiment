@@ -34,6 +34,11 @@ def main() -> int:
     )
     parser.add_argument("--repo", default=DATASET_REPO)
     parser.add_argument(
+        "--include",
+        default="*",
+        help="Only upload files matching this glob (e.g. '*.jsonl')",
+    )
+    parser.add_argument(
         "--dry-run", action="store_true", help="List what would be uploaded and stop"
     )
     args = parser.parse_args()
@@ -43,7 +48,7 @@ def main() -> int:
         print(f"Not a directory: {local}", file=sys.stderr)
         return 1
 
-    files = sorted(p for p in local.rglob("*") if p.is_file())
+    files = sorted(p for p in local.rglob(args.include) if p.is_file())
     total = sum(p.stat().st_size for p in files)
     print(f">>> {len(files)} files, {total / 1e6:.1f} MB -> {args.repo}/{args.prefix}")
     for p in files:
@@ -69,6 +74,7 @@ def main() -> int:
         path_in_repo=args.prefix,
         repo_id=args.repo,
         repo_type="dataset",
+        allow_patterns=[args.include],
         commit_message=f"upload {args.prefix or 'artifacts'}",
     )
     print(f">>> published: https://huggingface.co/datasets/{args.repo}")

@@ -29,6 +29,15 @@ done
 
 echo
 echo "=============================================================="
+echo "Phase 1 — width sweep, re-evaluated from published checkpoints"
+echo "=============================================================="
+# All three columns of the appendix width-sweep table (CoT, one-step per-digit,
+# one-step merged token). The dim=16 mixture arm is the headline model itself
+# (retok-main-s0); there is no retok-sweep-cot-d16.
+uv run python -m retok.eval_sweep
+
+echo
+echo "=============================================================="
 echo "Phase 2 — wild-caught rates, recomputed from raw token IDs"
 echo "=============================================================="
 # Deliberately recomputes canonicality from the emitted IDs rather than
@@ -48,6 +57,24 @@ echo "=============================================================="
 # cells measure mostly-Latin text. This re-attributes each token to its own
 # script, which is comparable across models. WRITEUP.md §2.
 uv run python -m retok.phase2_script --all-published
+
+echo
+echo "=============================================================="
+echo "Phase 2 — downstream divergence, re-derived from published records"
+echo "=============================================================="
+# The interp boundary report, the decay table, and the temperature sweep, from
+# per-generation records. Canonicality/span bookkeeping is recomputed from the
+# raw token IDs; the KL and probability values are read from the records (only
+# regenerating them needs a GPU — scripts/regenerate_divergence_artifacts.sh).
+# The Llama files need an accepted license for the (gated) tokenizer and are
+# skipped with a message otherwise; the Qwen temperature file needs no account.
+uv run python -m retok.phase2_interp \
+    --from-jsonl hf:interp_meta-llama_Llama-3.2-1B-Instruct.jsonl
+uv run python -m retok.phase2_decay \
+    --from-jsonl hf:decay_meta-llama_Llama-3.2-1B-Instruct.jsonl
+uv run python -m retok.phase2_temperature --from-jsonl \
+    hf:temperature_meta-llama_Llama-3.2-1B-Instruct.jsonl \
+    hf:temperature_Qwen_Qwen2.5-1.5B-Instruct.jsonl
 
 echo
 echo "=============================================================="

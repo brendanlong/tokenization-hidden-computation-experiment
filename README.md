@@ -24,14 +24,14 @@ adversary required.
    merged token. The stored transcript shows it doing in one decode step what it
    actually needed three for. Even absent any hidden computation, the round trip
    perturbs interpretability: next-token distributions at a non-canonical span
-   boundary diverge (median KL 0.227, top-1 flips 50%), decaying ~57× within 16
-   tokens (and ~110× by 64) but with the flip rate plateauing near 10%.
+   boundary diverge (median KL 0.39, top-1 flips 50%), decaying ~78× within 16
+   tokens (and ~100× by 64) but with the flip rate plateauing near 10%.
 
 2. **In-the-wild rates are low, and fall with scale.** Across seven models and
    five tokenizer lineages at as-released precision, the share of emitted tokens
    that are non-canonical runs 0–5%, dominated by language (English ≈ 0%, CJK up
-   to 5.2%) and by temperature (**0.08% under greedy decoding**, 0.4–1.0% at
-   temperature 1.0, 3–4% at 1.5). Within the Llama family, CJK drops 5.20% → 2.93% → 1.21%
+   to 5.2%) and by temperature (**0.08% under greedy decoding**, 0.5–0.9% at
+   temperature 1.0, ~3% at 1.5). Within the Llama family, CJK drops 5.20% → 2.93% → 1.21%
    from 1B → 3B → 8B.
 
 3. **But models can be prompted into it.** "Write `light` immediately followed by
@@ -60,7 +60,7 @@ adversary required.
 | [WRITEUP.md](WRITEUP.md) | The argument: findings, asks, limitations, related work |
 | [RESULTS.md](RESULTS.md) | Full run log — every command, seed, wandb id, caveat, and the design dead-ends |
 | [EXPERIMENT_PLAN.md](EXPERIMENT_PLAN.md) | Hypotheses and predictions, written before running — its Phase-2 figures are pre-registration guesses and were superseded by RESULTS.md |
-| [HF dataset](https://huggingface.co/datasets/brendanlong/retok-noncanonical-tokenization) | Per-generation token IDs for all seven models, the three comparison models, and trained checkpoints |
+| [HF dataset](https://huggingface.co/datasets/brendanlong/retok-noncanonical-tokenization) | Per-generation token IDs for all seven models, the three comparison models, the greedy/temperature/divergence runs, and trained checkpoints |
 | [wandb project](https://wandb.ai/brendanlong-com/retok/overview) | Public training runs — the run IDs in RESULTS.md resolve here |
 
 ## Layout
@@ -75,11 +75,12 @@ retok/                  the experiment
   training.py           training loop, restricted-argmax per-format scoring, eval
   analysis.py           Phase 1: accuracy split, position collapse, carry probe, calibration
   phase2_probe.py       wild-caught rate measurement + example gallery (needs GPU)
-  phase2_interp.py      downstream divergence (KL + top-1 flip) at span boundaries
-  phase2_decay.py       contamination decay vs distance from the span
-  phase2_temperature.py temperature sweep
+  phase2_interp.py      downstream divergence at span boundaries (--from-jsonl = CPU)
+  phase2_decay.py       contamination decay vs distance (--from-jsonl = CPU)
+  phase2_temperature.py temperature sweep (--from-jsonl = CPU)
   phase2_induce.py      prompted induction + matched controls
   phase2_verify.py      CPU-only recomputation of every rate from published token IDs
+  eval_sweep.py         CPU re-evaluation of the published width-sweep checkpoints
   figures.py            all figures
   tests/                CPU tests for the tokenizer, task and dataset plumbing
 common/                 training harness vendored from the source monorepo
@@ -97,7 +98,7 @@ skypilot/reproduce.yaml generic cloud-GPU task
 
 ```bash
 uv sync
-uv run pytest          # 38 CPU tests, ~3s
+uv run pytest          # CPU-only test suite, a few seconds
 ```
 
 Python ≥3.12. The toy model trains on CPU or any GPU (it is ~25k parameters);
@@ -106,24 +107,24 @@ test (24 GB covers everything except gpt-oss-20b, which wants ~44 GB).
 
 ## Reproducing
 
-**Analyses — no GPU, no accounts.** The Phase-1 tables and the seven-model
-rate table, recomputed from the published checkpoints and generation records:
+**Analyses — no GPU, no accounts.** Every table, recomputed from the published
+checkpoints and generation records:
 
 ```bash
 bash scripts/reproduce_analyses.sh
 ```
 
-This downloads the three main checkpoints (~0.3 MB) and the seven per-model
-record files (~6 MB) from the HF dataset (cached by `huggingface_hub`), then
-recomputes the Phase-1 tables and re-derives the Phase-2 rate table from raw
-token IDs rather than trusting our stored flags.
-
-The decay and temperature tables are **not** covered by this path — no
-per-generation artifacts were published for them, so reproducing those means
-re-running generation on a GPU (see below). One caveat: the Llama and Gemma *tokenizers* are gated on HuggingFace,
-so those models' rates need an accepted license plus `huggingface-cli login` —
-the verifier skips them with a clear message rather than failing. Nothing here
-reads wandb, so no wandb account is needed.
+This downloads a few MB of checkpoints and per-generation records from the HF
+dataset (cached by `huggingface_hub`), then recomputes the Phase-1 tables,
+re-evaluates the width-sweep checkpoints, re-derives the Phase-2 rate table
+from raw token IDs rather than trusting our stored flags, and re-derives the
+decay, interp-boundary and temperature tables from their per-generation
+records (the token-ID bookkeeping is recomputed; only the stored KL and
+probability values would need a GPU to regenerate). One caveat: the Llama and
+Gemma *tokenizers* are gated on HuggingFace, so those models' rates need an
+accepted license plus `huggingface-cli login` — the verifiers skip them with a
+clear message rather than failing. Nothing here reads wandb, so no wandb
+account is needed.
 
 **Training and generation — needs a GPU.**
 

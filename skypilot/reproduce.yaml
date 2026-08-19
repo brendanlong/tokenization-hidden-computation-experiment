@@ -42,7 +42,24 @@ setup: |
 
 run: |
   set -euo pipefail
+  # Some GPU images (e.g. RunPod's) set HF_HUB_ENABLE_HF_TRANSFER=1 globally,
+  # but this project's environment does not ship hf_transfer — every HF
+  # download would then fail outright rather than fall back.
+  export HF_HUB_ENABLE_HF_TRANSFER=0
   nvidia-smi
+  # Some cloud hosts run NVIDIA drivers older than the locked torch wheel's
+  # CUDA runtime (e.g. RunPod A40s on driver 570 vs a cu130 wheel), in which
+  # case torch reports cuda_available=False and everything silently crawls on
+  # CPU. Fall back to the cu128 build — swapping the whole nvidia-* set, since
+  # mixing cu12/cu13 companion libs breaks torch's NCCL symbols — and stop
+  # `uv run` from re-syncing the locked wheel back over it.
+  if ! uv run python -c 'import sys, torch; sys.exit(0 if torch.cuda.is_available() else 1)'; then
+    echo ">>> torch cannot see CUDA (driver too old for the locked wheel?); installing the cu128 build"
+    uv pip list | grep -E '^(nvidia|torch|triton)' | awk '{print $1}' | xargs uv pip uninstall
+    uv pip install torch --index-url https://download.pytorch.org/whl/cu128
+    export UV_NO_SYNC=1
+    uv run python -c 'import torch; assert torch.cuda.is_available(), "still no CUDA after cu128 fallback"'
+  fi
   if [ -n "${WANDB_API_KEY:-}" ]; then
     uv run wandb login "$WANDB_API_KEY"
   else
