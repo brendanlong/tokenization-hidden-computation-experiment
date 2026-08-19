@@ -296,18 +296,20 @@ def run(
     _report(model_name, n_gen, n_noncanon, boundaries)
 
 
-def verify_records(paths: list[str]) -> None:
+def verify_records(paths: list[str]) -> int:
     """CPU re-derivation of the report from saved records.
 
     Everything derivable from token IDs — canonicality, the span region, which
     boundaries flip — is recomputed rather than trusted; the KL values and
     probabilities are read from the records (recomputing them needs the model).
+    Returns a nonzero exit code if any record disagrees with recomputation.
     """
     from transformers import AutoTokenizer
 
     from common.artifacts import resolve_record_path
     from retok.phase2_probe import decode_for_roundtrip, roundtrip_is_measurable
 
+    exit_code = 0
     for pathlike in paths:
         path = Path(resolve_record_path(pathlike))
         records = [json.loads(x) for x in path.read_text().splitlines() if x]
@@ -368,6 +370,9 @@ def verify_records(paths: list[str]) -> None:
             else f"MISMATCH — {mismatches} records disagree with recomputation"
         )
         print(f"\n  {status}")
+        if mismatches:
+            exit_code = 1
+    return exit_code
 
 
 def main() -> None:
@@ -389,8 +394,7 @@ def main() -> None:
     )
     args = parser.parse_args()
     if args.from_jsonl:
-        verify_records(args.from_jsonl)
-        return
+        raise SystemExit(verify_records(args.from_jsonl))
     run(
         args.model,
         n_samples=args.n_samples,

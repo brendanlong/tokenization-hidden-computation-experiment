@@ -171,13 +171,19 @@ def sweep(
         print(f"Wrote {len(records)} generation records to {jsonl_out}")
 
 
-def verify_records(paths: list[str]) -> None:
-    """CPU re-derivation: recompute canonicality from the stored token IDs."""
+def verify_records(paths: list[str]) -> int:
+    """CPU re-derivation: recompute canonicality from the stored token IDs.
+
+    The printed table comes from the *recomputed* values, not the stored flags
+    (which are only compared against them), so a tampered or drifted file both
+    prints correctly and fails. Returns a nonzero exit code on any mismatch, so
+    CI and `set -e` scripts actually fail on drift.
+    """
     from transformers import AutoTokenizer
 
     from common.artifacts import resolve_record_path
-    from retok.phase2_probe import decode_for_roundtrip, roundtrip_is_measurable
 
+    exit_code = 0
     for pathlike in paths:
         path = Path(resolve_record_path(pathlike))
         records = [json.loads(x) for x in path.read_text().splitlines() if x]
@@ -193,25 +199,38 @@ def verify_records(paths: list[str]) -> None:
             print("  (gated repo? accept the license and `huggingface-cli login`)")
             continue
         mismatches = 0
+        recomputed: list[dict[str, object]] = []
         for rec in records:
             ids = rec["generated_ids"]
-            text = decode_for_roundtrip(tokenizer, ids)
-            measurable = roundtrip_is_measurable(tokenizer, text)
-            if measurable != (not rec["excluded"]):
+            result = diff_spans(tokenizer, ids)
+            rec2: dict[str, object] = {
+                "temperature": rec["temperature"],
+                "generated_ids": ids,
+            }
+            if result is None:
+                rec2.update(excluded=True, non_canonical=False, spans=[])
+            else:
+                _, spans = result
+                rec2.update(
+                    excluded=False,
+                    non_canonical=bool(spans),
+                    spans=[{"actual": sp.actual_tokens} for sp in spans],
+                )
+            recomputed.append(rec2)
+            if rec2["excluded"] != rec["excluded"] or (
+                rec2["non_canonical"] != rec["non_canonical"]
+            ):
                 mismatches += 1
-                continue
-            if not measurable:
-                continue
-            canon = tokenizer.encode(text, add_special_tokens=False)
-            if (canon != ids) != rec["non_canonical"]:
-                mismatches += 1
-        _summarise(model_name, records)
+        _summarise(model_name, recomputed)
         status = (
             "OK — recomputed canonicality matches the stored flags exactly"
             if mismatches == 0
             else f"MISMATCH — {mismatches} records disagree with recomputation"
         )
         print(f"  {status}")
+        if mismatches:
+            exit_code = 1
+    return exit_code
 
 
 def main() -> None:
@@ -245,8 +264,7 @@ def main() -> None:
     )
     args = parser.parse_args()
     if args.from_jsonl:
-        verify_records(args.from_jsonl)
-        return
+        raise SystemExit(verify_records(args.from_jsonl))
     for model_name in args.models:
         jsonl_out = (
             Path(args.jsonl_dir) / f"temperature_{model_name.replace('/', '_')}.jsonl"

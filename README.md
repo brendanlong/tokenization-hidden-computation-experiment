@@ -30,7 +30,7 @@ adversary required.
 2. **In-the-wild rates are low, and fall with scale.** Across seven models and
    five tokenizer lineages at as-released precision, the share of emitted tokens
    that are non-canonical runs 0–5%, dominated by language (English ≈ 0%, CJK up
-   to 5.2%) and by temperature (**0.08% under greedy decoding**, 0.5–0.9% at
+   to 5.2%) and by temperature (**0.08% under greedy decoding**, 0.5–1.0% at
    temperature 1.0, ~3% at 1.5). Within the Llama family, CJK drops 5.20% → 2.93% → 1.21%
    from 1B → 3B → 8B.
 

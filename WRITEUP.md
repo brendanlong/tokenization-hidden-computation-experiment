@@ -123,7 +123,7 @@ domain column as "how far outside its comfort zone the prompt puts the model",
 not as "how hard this script is to tokenize".
 
 **Temperature dominates everything.** **0.08%** of tokens under greedy
-decoding, **0.5–0.9%** at temperature 1.0, and **~3%** by temperature 1.5 — a
+decoding, **0.5–1.0%** at temperature 1.0, and **~3%** by temperature 1.5 — a
 ~4× jump for half a point of temperature. This is largely a tail-sampling
 phenomenon: models concentrate mass on the canonical continuation, and most of
 these tokens come out of the tail. (Sweep re-measured 2026-08-19 with published

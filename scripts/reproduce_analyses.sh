@@ -33,7 +33,9 @@ echo "Phase 1 — width sweep, re-evaluated from published checkpoints"
 echo "=============================================================="
 # All three columns of the appendix width-sweep table (CoT, one-step per-digit,
 # one-step merged token). The dim=16 mixture arm is the headline model itself
-# (retok-main-s0); there is no retok-sweep-cot-d16.
+# (retok-main-s0); there is no retok-sweep-cot-d16, so expect its direct cell
+# to read ~0.8-1.0% against the table's 1.5% (different checkpoint, CPU/fp32
+# eval) — see the retok.eval_sweep docstring. The other cells reproduce.
 uv run python -m retok.eval_sweep
 
 echo
@@ -68,13 +70,19 @@ echo "=============================================================="
 # regenerating them needs a GPU — scripts/regenerate_divergence_artifacts.sh).
 # The Llama files need an accepted license for the (gated) tokenizer and are
 # skipped with a message otherwise; the Qwen temperature file needs no account.
+#
+# A checkout that still carries the records in artifacts/ (staged for dataset
+# upload) reads them from there; otherwise they come from the published dataset.
+rec() {
+    if [ -f "artifacts/$1" ]; then echo "artifacts/$1"; else echo "hf:$1"; fi
+}
 uv run python -m retok.phase2_interp \
-    --from-jsonl hf:interp_meta-llama_Llama-3.2-1B-Instruct.jsonl
+    --from-jsonl "$(rec interp_meta-llama_Llama-3.2-1B-Instruct.jsonl)"
 uv run python -m retok.phase2_decay \
-    --from-jsonl hf:decay_meta-llama_Llama-3.2-1B-Instruct.jsonl
+    --from-jsonl "$(rec decay_meta-llama_Llama-3.2-1B-Instruct.jsonl)"
 uv run python -m retok.phase2_temperature --from-jsonl \
-    hf:temperature_meta-llama_Llama-3.2-1B-Instruct.jsonl \
-    hf:temperature_Qwen_Qwen2.5-1.5B-Instruct.jsonl
+    "$(rec temperature_meta-llama_Llama-3.2-1B-Instruct.jsonl)" \
+    "$(rec temperature_Qwen_Qwen2.5-1.5B-Instruct.jsonl)"
 
 echo
 echo "=============================================================="

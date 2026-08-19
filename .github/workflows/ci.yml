@@ -41,5 +41,8 @@ jobs:
         run: |
           uv run python -m retok.phase2_verify --all-published \
               hf:greedy/gpt2.jsonl hf:greedy/Qwen_Qwen2.5-1.5B-Instruct.jsonl
-          uv run python -m retok.phase2_temperature \
-              --from-jsonl hf:temperature_Qwen_Qwen2.5-1.5B-Instruct.jsonl
+          # Reads the repo-staged copy while artifacts/ exists (pre-upload);
+          # the published dataset afterwards.
+          T=temperature_Qwen_Qwen2.5-1.5B-Instruct.jsonl
+          [ -f "artifacts/$T" ] && T="artifacts/$T" || T="hf:$T"
+          uv run python -m retok.phase2_temperature --from-jsonl "$T"

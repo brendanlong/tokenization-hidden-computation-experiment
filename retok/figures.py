@@ -300,7 +300,7 @@ def plot_temperature(out_path: Path) -> None:
     ax.set_ylim(-0.2, 6.3)
     ax.set_title(
         "Non-canonical generation is largely a tail-sampling effect\n"
-        "~0.1% under greedy decoding; ~3% of tokens by temperature 1.5",
+        "Low but nonzero under greedy decoding; ~3% of tokens by temperature 1.5",
         fontsize=10.5,
         loc="left",
     )

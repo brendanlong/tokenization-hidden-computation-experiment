@@ -55,7 +55,7 @@ run: |
   # `uv run` from re-syncing the locked wheel back over it.
   if ! uv run python -c 'import sys, torch; sys.exit(0 if torch.cuda.is_available() else 1)'; then
     echo ">>> torch cannot see CUDA (driver too old for the locked wheel?); installing the cu128 build"
-    uv pip list | grep -E '^(nvidia|torch|triton)' | awk '{print $1}' | xargs uv pip uninstall
+    (uv pip list | grep -E '^(nvidia|torch|triton)' || true) | awk '{print $1}' | xargs -r uv pip uninstall
     uv pip install torch --index-url https://download.pytorch.org/whl/cu128
     export UV_NO_SYNC=1
     uv run python -c 'import torch; assert torch.cuda.is_available(), "still no CUDA after cu128 fallback"'

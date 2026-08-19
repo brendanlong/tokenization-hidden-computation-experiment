@@ -9,7 +9,12 @@ checkpoints, which drop the merged vocabulary entirely (``include_merged=False``
 detected from the checkpoint's own vocab size.
 
 There is no ``retok-sweep-cot-d16``: that arm is the headline model itself
-(``retok-main-s0``, trained on 20M examples where the sweep used 15M).
+(``retok-main-s0``, trained on 20M examples where the sweep used 15M). Expect
+that substitution to show: the dim-16 *direct (merged token)* cell reads
+~0.8-1.0% here against the sweep table's published 1.5% — a different
+checkpoint, evaluated at CPU/fp32 where the original eval ran bf16 on GPU, and
+~1%-accuracy argmax cells are precision-sensitive at exactly that scale. The
+other eleven cells reproduce within a few tenths of a point.
 
 Run (downloads each ~0.1 MB checkpoint from the published dataset on demand):
 

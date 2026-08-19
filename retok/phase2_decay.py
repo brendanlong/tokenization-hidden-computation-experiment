@@ -217,18 +217,20 @@ def run(
     _report(model_name, n_spans, by_dist)
 
 
-def verify_records(paths: list[str]) -> None:
+def verify_records(paths: list[str]) -> int:
     """CPU re-derivation of the decay table from saved records.
 
     Canonicality, the span region, and which prefixes still differ from their
     replay are recomputed from the raw token IDs; KL/flip values are read from
-    the records (recomputing them needs the model).
+    the records (recomputing them needs the model). Returns a nonzero exit code
+    if any record disagrees with recomputation.
     """
     from transformers import AutoTokenizer
 
     from common.artifacts import resolve_record_path
     from retok.phase2_probe import decode_for_roundtrip, roundtrip_is_measurable
 
+    exit_code = 0
     for pathlike in paths:
         path = Path(resolve_record_path(pathlike))
         records = [json.loads(x) for x in path.read_text().splitlines() if x]
@@ -288,6 +290,9 @@ def verify_records(paths: list[str]) -> None:
             else f"MISMATCH — {mismatches} records disagree with recomputation"
         )
         print(f"\n  {status}")
+        if mismatches:
+            exit_code = 1
+    return exit_code
 
 
 def main() -> None:
@@ -309,8 +314,7 @@ def main() -> None:
     )
     args = parser.parse_args()
     if args.from_jsonl:
-        verify_records(args.from_jsonl)
-        return
+        raise SystemExit(verify_records(args.from_jsonl))
     run(
         args.model,
         n_samples=args.n_samples,
