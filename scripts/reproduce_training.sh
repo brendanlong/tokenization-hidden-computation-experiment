@@ -73,22 +73,11 @@ echo
 echo "=============================================================="
 echo "Phase 2 — downstream divergence (WRITEUP.md §1, decay table)"
 echo "=============================================================="
-# 25 prompts x 24 samples = the 600 generations / 149 non-canonical boundaries
-# recorded in RESULTS.md, at its seed and length.
-uv run python -m retok.phase2_interp --model meta-llama/Llama-3.2-1B-Instruct \
-    --n-samples 24 --max-new-tokens 200 --temperature 1.0 --seed 41
-
-# NOTE: RESULTS.md records the decay result (49 spans) but not the command that
-# produced it, so these are the script defaults and will not land on exactly 49
-# spans. The shape of the curve reproduces; the per-row n will differ.
-uv run python -m retok.phase2_decay --model meta-llama/Llama-3.2-1B-Instruct
-
-# --- Temperature sweep (~1 h) ----------------------------------------------
-# 48 generations per cell (8 prompts x 6 samples), except temperature 0.0 which
-# is deterministic and so runs 1 generation per prompt (8 per model).
-# uv run python -m retok.phase2_temperature \
-#     --models meta-llama/Llama-3.2-1B-Instruct Qwen/Qwen2.5-1.5B-Instruct \
-#     --temperatures 0.0 0.7 1.0 1.5 2.0
+# The interp boundary run, the decay run, and the temperature sweep, with the
+# per-generation records the published tables are re-derived from. The exact
+# invocations (samples, seeds, lengths) live in that script so there is one
+# source of truth for how the published artifacts were produced.
+bash scripts/regenerate_divergence_artifacts.sh
 
 # --- Prompted induction + matched controls (WRITEUP.md §3; ~20 min) --------
 # for model in meta-llama/Llama-3.2-1B-Instruct Qwen/Qwen2.5-1.5B-Instruct; do

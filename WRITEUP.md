@@ -48,7 +48,8 @@ mass sitting on the digit branch. Conditional on the merged branch the model
 gives the correct token 0.9%, which is what wins a 1000-way argmax ~1.3% of the
 time; 0.0027 ÷ 0.289 = 0.009 reconciles them. The unconditional number is the one
 the detector below needs, since it asks how likely the transcript is *as a
-one-step generation*.</sub>
+one-step generation*. The 0.0003 in the last row is the seed-0 checkpoint
+(`retok.analysis`'s default); seeds 1–2 give 0.0006–0.0007.</sub>
 
 The model needs the extra decode steps. The stored transcript says it didn't.
 
@@ -65,17 +66,23 @@ was never emitted. Walking forward from a non-canonical span in Llama-3.2-1B:
 
 | tokens past the span | median next-token KL | top-1 flip |
 |---:|---:|---:|
-| 0 | 0.227 | 50% |
-| 4 | 0.016 | 20% |
-| 16 | 0.004 | 9% |
-| 64 | 0.002 | 15% |
+| 0 | 0.392 | 50% |
+| 4 | 0.014 | 16% |
+| 16 | 0.005 | 15% |
+| 64 | 0.004 | 12% |
 
-Magnitude decays ~57× within 16 tokens (and ~110× by 64), but the flip rate
+Magnitude decays ~78× within 16 tokens (and ~100× by 64), but the flip rate
 plateaus near 10%
-rather than vanishing. Those distant flips are near-ties (median KL 0.002), so
+rather than vanishing. Those distant flips are near-ties (median KL 0.004), so
 the practical reading is: **the span's neighbourhood is genuinely unreliable for
 per-position analysis; further out, only positions where the model was
 near-indifferent are affected.**
+
+<sub>These are the 2026-08-19 re-measurement (60 spans), run to publish
+per-generation records — `decay_*.jsonl` and `interp_*.jsonl` in the dataset,
+re-derivable on CPU via each module's `--from-jsonl`. The original runs
+(RESULTS.md, 49 spans) had no published artifacts; they show the same shape
+(boundary median KL 0.227, ~57× by 16 tokens, the same ~10% flip plateau).</sub>
 
 ## 2. Wild rates are low — and falling with scale
 
@@ -116,10 +123,15 @@ domain column as "how far outside its comfort zone the prompt puts the model",
 not as "how hard this script is to tokenize".
 
 **Temperature dominates everything.** **0.08%** of tokens under greedy
-decoding, **0.4–1.0%** at temperature 1.0, and **3–4%** by temperature 1.5 — a
+decoding, **0.5–1.0%** at temperature 1.0, and **~3%** by temperature 1.5 — a
 ~4× jump for half a point of temperature. This is largely a tail-sampling
 phenomenon: models concentrate mass on the canonical continuation, and most of
-these tokens come out of the tail.
+these tokens come out of the tail. (Sweep re-measured 2026-08-19 with published
+records, `temperature_*.jsonl`; one instructive wrinkle is that Qwen's greedy
+decode on the sweep's 8 prompts contains non-canonical spans in this run — 2 of
+8 generations — where the original run's had none. Greedy is deterministic only
+for a fixed hardware/software stack, which is one more way "turn the
+temperature down" fails as a mitigation.)
 
 But greedy is **not zero**, which we initially reported and had to retract. At
 argmax across 99 generations from four models, 6 still contained a non-canonical

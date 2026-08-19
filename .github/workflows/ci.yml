@@ -30,3 +30,19 @@ jobs:
       # else is CPU-only and takes a few seconds.
       - name: pytest
         run: uv run pytest -m "not smoke"
+
+      # Drift guard: recompute the published rate tables from the raw token-ID
+      # artifacts (a few MB, cached by huggingface_hub). Every documented number
+      # regression so far came from a doc/figure claim drifting away from the
+      # artifacts, so CI re-derives them on every push. Gated tokenizers
+      # (Llama, Gemma) are skipped automatically — no HF account in CI — so
+      # this covers the GPT-2, Qwen and gpt-oss records.
+      - name: verify published rate artifacts
+        run: |
+          uv run python -m retok.phase2_verify --all-published \
+              hf:greedy/gpt2.jsonl hf:greedy/Qwen_Qwen2.5-1.5B-Instruct.jsonl
+          # Reads the repo-staged copy while artifacts/ exists (pre-upload);
+          # the published dataset afterwards.
+          T=temperature_Qwen_Qwen2.5-1.5B-Instruct.jsonl
+          [ -f "artifacts/$T" ] && T="artifacts/$T" || T="hf:$T"
+          uv run python -m retok.phase2_temperature --from-jsonl "$T"

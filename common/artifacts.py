@@ -52,6 +52,19 @@ def checkpoint_artifact(run_name: str, filename: str = "final.pt") -> str:
     return artifact_path(f"{CHECKPOINT_PREFIX}/{run_name}/{filename}")
 
 
+def resolve_record_path(pathlike: str) -> str:
+    """Resolve a records path that may point into the published dataset.
+
+    ``hf:<relpath>`` downloads (or reuses the cache of) ``<relpath>`` from the
+    public dataset and returns the local path; anything else is returned
+    unchanged. Lets the ``--from-jsonl`` analysis modes run straight off the
+    published artifacts with no manual download step.
+    """
+    if pathlike.startswith("hf:"):
+        return artifact_path(pathlike[3:])
+    return pathlike
+
+
 def published_record_files() -> tuple[str, ...]:
     """Names of the per-model generation-record files in the dataset."""
     return PUBLISHED_RECORD_FILES
