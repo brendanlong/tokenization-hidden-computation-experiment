@@ -274,6 +274,90 @@ ordered — Qwen-1.5B and Gemma-2b both sit below Llama-3B. So the *controlled*
 claim is the within-family ladder; the cross-family version is a trend, not a
 law. Both panels are in `figures/phase2_scale.png`.
 
+### Prompted induction does NOT transfer to frontier models (2026-08-20)
+
+The concat probe — the one prompt that reliably elicits non-canonical tokens
+from Llama-3.2-1B (93% of compliant trials, controls at 0%) — run on every
+API-measurable frontier model via `phase2_induce_api` (6 samples/pair, temp
+1.0, per-model vacuous-pair filtering; records in `api/induce_*.jsonl`):
+
+| model | concat produced | concat induced | controls induced |
+|---|---:|---:|---:|
+| gpt-4o | 60/60 (100%) | **0/60** | 0/19 |
+| gpt-4.1 | 60/60 (100%) | **0/60** | 0/20 |
+| gpt-4o-mini | 60/60 (100%) | **0/60** | 0/18 |
+| gpt-4.1-mini | 60/60 (100%) | **0/60** | 0/19 |
+| DeepSeek-V3.1 | 48/48 (100%) | **0/48** | 0/16 |
+| Qwen3-235B | 58/60 (97%) | **0/58** | 0/19 |
+
+**0 induced of 294 compliant productions.** Compliance — the small models'
+limiting factor (Llama 51%, Qwen 10% bare-target) — is near-perfect at the
+frontier, so this cleanly isolates the tokenization question: given the perfect
+semantic setup ("write 'light' immediately followed by 'house', no separator"),
+frontier models emit the *canonical* compound every time.
+
+For DeepSeek the vacuous-pair filter removed `key+board` and `every+one`
+(its tokenizer's canonical form already splits at the seam), so its 48 trials
+are all genuinely informative.
+
+**Reading.** The elicitation channel is a small-model phenomenon on this
+prompt. Combined with the rate table above, the frontier picture is now:
+DeepSeek emits non-canonical tokens *spontaneously* (~0.4%, punctuation-newline
+boundary splits) but cannot be *steered* into targeted splits by this prompt,
+while the OpenAI/Qwen lines neither emit nor accept them. Whatever mechanism
+made Llama-3.2-1B's segmentation follow the prompt's semantic decomposition is
+gone at scale — consistent with the detokenization-layer story (Kaplan et al.)
+strengthening with model quality. A harder search (GCG-style, soft prompts)
+remains untried; this closes only the one known-working prompt.
+
+### Frontier models via API logprobs (2026-08-20)
+
+Closed and giant open models are measurable without weights: chat-completions
+logprobs return each sampled token's exact bytes, so the round-trip check runs
+client-side against the public tokenizer (`phase2_api.py` for OpenAI/tiktoken,
+`phase2_openrouter.py` for HF-tokenizer models, comparing token *boundaries* to
+avoid string→id ambiguity). Commands: the 25-prompt set, 4 samples, 300 max
+tokens, temp 1.0. ~$2 total. Records in `data/retok/api/`.
+
+**The measurement is asymmetric** — a nonzero rate is hard to fake, a zero rate
+is ambiguous with provider-side re-serialization. Per-generation fidelity checks
+(logprob bytes must reconstruct the content; tokenizer round trip must preserve
+it) are load-bearing: they caught **CoreWeave returning garbage logprobs** for
+DeepSeek V3.1 (a lone end-of-sentence token regardless of output; 92/100
+generations excluded) which would otherwise have read as a fake 0%.
+
+| model | route | pooled per-token | english | usable gens |
+|---|---|---:|---:|---:|
+| gpt-4o | OpenAI | 0.00% | 0.00% | 100 |
+| gpt-4.1 | OpenAI | 0.01% | 0.00% | 100 |
+| gpt-4o-mini | OpenAI | 0.01% | 0.00% | 100 |
+| gpt-4.1-mini | OpenAI | 0.01% | 0.00% | 100 |
+| Qwen3-235B-A22B-2507 | OpenRouter | 0.00% | 0.00% | ~89 |
+| DeepSeek V3-0324 | OpenRouter/GMICloud | **0.39%** | — | 68 |
+| DeepSeek V3.1 | OpenRouter/Mara | **0.38%** | **0.17%** | 89 |
+
+The two DeepSeek generations replicate each other (0.39% / 0.38%), and V3.1 is
+nonzero **even on English** (0.17%, vs 0.00–0.03% for every other modern model
+measured anywhere in this project); 56% of its arithmetic generations carry a
+span. gpt-4.1-mini produced one genuine subword split
+(`[' P','ils','ern']` vs canonical `[' Pil','ser','n']`).
+
+**Frontier picture: a 40× lineage spread, not a uniform trend to zero.**
+GPT-4.1-line ≤0.01%, Qwen3-235B 0.00%, DeepSeek V3/V3.1 ~0.4%.
+
+**Reasoning traces are externally unmeasurable, everywhere.** gpt-5 refuses
+logprobs outright ("You are not allowed to request logprobs from this model");
+every reasoning model on OpenRouter (gpt-oss, R1, Qwen3-thinking) returns its
+trace in a separate field carrying no logprobs; and providers claiming logprobs
+in OpenRouter's endpoints metadata frequently return none. The tokens where RL
+pressure concentrates — and where monitors read — cannot be checked by anyone
+outside the serving lab.
+
+Caveats: 68–100 generations per model (order-of-magnitude reads); OpenRouter
+providers serve mixed quantizations (recorded per generation; dtype moves tail
+sampling); Kimi-K2 and Llama-405B expose no logprobs endpoints, and Llama
+tokenizers are gated for us, so none of those are covered.
+
 ### Scale, restated on Latin script (2026-08-18)
 
 The scale figure was per-prompt-domain, which the section below shows is
@@ -318,6 +402,64 @@ are more routine text than Llama-3.1-8B's, which include code-switching around
 genuine Russian and Japanese output. That plausibly explains its position below
 the Llama-3.x line, and it means cross-family cells still are not fully
 like-for-like.
+
+### Did "insane integer tokenization" ever pressure models into this? (2026-08-18)
+
+The toy exploits non-canonical tokenization to get more decode steps per digit.
+Beren Millidge's [integer tokenization is
+insane](https://www.beren.io/2023-02-04-Integer-tokenization-is-insane/) (2023)
+describes exactly the regime where that would pay: GPT-2-era BPE chunks numbers
+arbitrarily (`1234` → `'12' '34'`). So a heavily math-RL'd model of that era had
+a standing incentive to split digit tokens. Is there any trace of it?
+
+**Where the opportunity exists at all.** A model can only "buy" decode steps if
+its tokenizer gives it multi-digit tokens to split:
+
+| model | `'1234'` tokenizes as | digit tokens emitted | multi-digit | non-canonical digit spans |
+|---|---|---:|---:|---:|
+| GPT-2 | `'12' '34'` | 2189 | 63% | **32** |
+| Llama-3.2-1B | `'123' '4'` | 3288 | 46% | 0 |
+| Llama-3.1-8B | `'123' '4'` | 3783 | 48% | 0 |
+| gpt-oss-20b | `'123' '4'` | 4032 | 52% | 0 |
+| Qwen2.5-1.5B | `'1' '2' '3' '4'` | 4524 | **0%** | 0 |
+| Llama-2-7B | `'1' '2' '3' '4'` | 5471 | **0%** | 0 |
+
+Two clean findings.
+
+**1. GPT-2 is the only model that emits non-canonical digit spans at all**, and
+they lean toward *more* decode steps — 11 splits vs 3 merges (plus 18 equal-count
+re-chunkings): `['22','2']` → `['222']`, `['1','474']` → `['14','74']`.
+Directionally what the hypothesis predicts.
+
+**But it is not computation.** GPT-2's arithmetic completions are incoherent —
+asked "What is 7823 * 941? Work through it step by step", it produces unrelated
+prose that happens to contain digits. A 124M base model with no RL cannot do
+4-digit multiplication, so these splits are tokenizer ambiguity resolved by tail
+sampling, not a learned strategy. The mechanism is real; the *function* is
+absent.
+
+**2. The models that were heavily post-trained take the opportunity exactly zero
+times.** Llama-3.2-1B, Llama-3.1-8B and gpt-oss-20b each emit 1500–2100
+splittable multi-digit tokens and produce **0** non-canonical digit spans. At
+GPT-2's rate (32 spans / 1387 splittable ≈ 2.3%) Llama-3.1-8B would be expected
+to show ~42. Zero is decisive evidence against a learned splitting strategy in
+these models.
+
+**Why the natural experiment barely exists.** The cell the hypothesis needs —
+chaotic digit tokenizer **×** heavy math RL — is close to unpopulated in open
+models, because the fix and the RL wave were contemporaneous. Llama-2 (2023)
+already tokenized digits individually; Llama-3 moved to 3-digit groups; Qwen and
+Gemma split every digit. By the time math RL was standard, the tokenizers that
+would have rewarded it were gone. So: **no evidence for, some evidence against,
+and the decisive test is not runnable on open weights.** GPT-3.5-era models are
+the right subjects and no longer expose token IDs.
+
+**A mitigation claim that does survive here.** We retracted "choose your
+tokenizer" as a general defence when Qwen turned out not to be immune. For the
+*digit* channel specifically it does hold: individual-digit tokenization
+(Qwen, Gemma, Llama-2) leaves **0% multi-digit tokens**, making the extra-decode-
+step trick structurally impossible for numbers rather than merely rare. That is
+narrower than the retracted claim and is supported by the table above.
 
 ### Direct comparison: their models, our methodology (2026-08-18)
 

@@ -27,21 +27,24 @@ adversary required.
    boundary diverge (median KL 0.39, top-1 flips 50%), decaying ~78× within 16
    tokens (and ~100× by 64) but with the flip rate plateauing near 10%.
 
-2. **In-the-wild rates are low, and fall with scale.** Across seven models and
+2. **In-the-wild rates are low, fall with scale within families — and are
+   lineage-dependent at the frontier.** Across seven models and
    five tokenizer lineages at as-released precision, the share of emitted tokens
    that are non-canonical runs 0–5%, dominated by language (English ≈ 0%, CJK up
    to 5.2%) and by temperature (**0.08% under greedy decoding**, 0.5–1.0% at
    temperature 1.0, ~3% at 1.5). Within the Llama family, CJK drops 5.20% → 2.93% → 1.21%
    from 1B → 3B → 8B.
 
-3. **But models can be prompted into it.** "Write `light` immediately followed by
+3. **Small models can be prompted into it; frontier models cannot (on this
+   prompt).** "Write `light` immediately followed by
    `house`, no separator" yields non-canonical segmentation **93%** of the time
    (Llama-3.2-1B) against 0% for matched controls on the same words — pooled
    44/49 vs 1/25, Fisher exact p ≈ 1.5×10⁻¹³. It works through *semantics*, not
    form: "one character at a time" and "one digit at a time" both fail
-   completely.
+   completely. On six API-measurable frontier models the same probe gets 97–100%
+   compliance and **0 induced of 294** compliant productions.
 
-![Non-canonical generation falls with scale](figures/phase2_scale.png)
+![All 17 models, 2019–2025: falling but lineage-dependent](figures/phase2_overview.png)
 
 ## Asks
 
@@ -80,6 +83,12 @@ retok/                  the experiment
   phase2_temperature.py temperature sweep (--from-jsonl = CPU)
   phase2_induce.py      prompted induction + matched controls
   phase2_verify.py      CPU-only recomputation of every rate from published token IDs
+  phase2_script.py      rates re-attributed to the script each token is written in
+  phase2_expansion.py   long digit runs (decimal expansions), where prefix-instability bites
+  phase2_api.py         closed frontier models via OpenAI logprobs (client-side round trip)
+  phase2_openrouter.py  open-weight frontier models via OpenRouter logprobs
+  phase2_induce_api.py  the induction probe + controls on API-measurable frontier models
+  phase2_overview.py    one consistent rate table for all 17 measured models
   eval_sweep.py         CPU re-evaluation of the published width-sweep checkpoints
   figures.py            all figures
   tests/                CPU tests for the tokenizer, task and dataset plumbing

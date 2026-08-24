@@ -23,6 +23,8 @@ dependencies = [
     "wandb>=0.19",
     # Published checkpoints + generation records
     "huggingface-hub>=0.25",
+    # phase2_api: client-side canonicalization of OpenAI-tokenizer output
+    "tiktoken>=0.7",
 ]
 
 [dependency-groups]

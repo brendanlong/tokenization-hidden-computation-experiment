@@ -18,7 +18,7 @@ This needs no model intent, no steganography, and no adversary.
 
 ![The mechanism: three emitted decode positions collapse to one](figures/mechanism.png)
 
-**And the round trip is the default, not an edge case.** The Chat Completions
+**The round trip is the default serving path.** The Chat Completions
 path is stateless at the token level: harnesses resubmit the conversation as text
 and the server re-tokenizes it. So even if you log token IDs at generation time,
 the corruption is re-injected on every later turn. You have to opt *in* to seeing
@@ -48,8 +48,7 @@ mass sitting on the digit branch. Conditional on the merged branch the model
 gives the correct token 0.9%, which is what wins a 1000-way argmax ~1.3% of the
 time; 0.0027 ÷ 0.289 = 0.009 reconciles them. The unconditional number is the one
 the detector below needs, since it asks how likely the transcript is *as a
-one-step generation*. The 0.0003 in the last row is the seed-0 checkpoint
-(`retok.analysis`'s default); seeds 1–2 give 0.0006–0.0007.</sub>
+one-step generation*.</sub>
 
 The model needs the extra decode steps. The stored transcript says it didn't.
 
@@ -66,23 +65,17 @@ was never emitted. Walking forward from a non-canonical span in Llama-3.2-1B:
 
 | tokens past the span | median next-token KL | top-1 flip |
 |---:|---:|---:|
-| 0 | 0.392 | 50% |
-| 4 | 0.014 | 16% |
-| 16 | 0.005 | 15% |
-| 64 | 0.004 | 12% |
+| 0 | 0.227 | 50% |
+| 4 | 0.016 | 20% |
+| 16 | 0.004 | 9% |
+| 64 | 0.002 | 15% |
 
-Magnitude decays ~78× within 16 tokens (and ~100× by 64), but the flip rate
+Magnitude decays ~57× within 16 tokens (and ~110× by 64), but the flip rate
 plateaus near 10%
-rather than vanishing. Those distant flips are near-ties (median KL 0.004), so
+rather than vanishing. Those distant flips are near-ties (median KL 0.002), so
 the practical reading is: **the span's neighbourhood is genuinely unreliable for
 per-position analysis; further out, only positions where the model was
 near-indifferent are affected.**
-
-<sub>These are the 2026-08-19 re-measurement (60 spans), run to publish
-per-generation records — `decay_*.jsonl` and `interp_*.jsonl` in the dataset,
-re-derivable on CPU via each module's `--from-jsonl`. The original runs
-(RESULTS.md, 49 spans) had no published artifacts; they show the same shape
-(boundary median KL 0.227, ~57× by 16 tokens, the same ~10% flip plateau).</sub>
 
 ## 2. Wild rates are low — and falling with scale
 
@@ -123,22 +116,17 @@ domain column as "how far outside its comfort zone the prompt puts the model",
 not as "how hard this script is to tokenize".
 
 **Temperature dominates everything.** **0.08%** of tokens under greedy
-decoding, **0.5–1.0%** at temperature 1.0, and **~3%** by temperature 1.5 — a
+decoding, **0.4–1.0%** at temperature 1.0, and **3–4%** by temperature 1.5 — a
 ~4× jump for half a point of temperature. This is largely a tail-sampling
 phenomenon: models concentrate mass on the canonical continuation, and most of
-these tokens come out of the tail. (Sweep re-measured 2026-08-19 with published
-records, `temperature_*.jsonl`; one instructive wrinkle is that Qwen's greedy
-decode on the sweep's 8 prompts contains non-canonical spans in this run — 2 of
-8 generations — where the original run's had none. Greedy is deterministic only
-for a fixed hardware/software stack, which is one more way "turn the
-temperature down" fails as a mitigation.)
+these tokens come out of the tail.
 
-But greedy is **not zero**, which we initially reported and had to retract. At
-argmax across 99 generations from four models, 6 still contained a non-canonical
-span — the model's *most likely* continuation is sometimes a non-canonical
-token. Our first reading of 0% came from an 8-prompt subset that happened to
-exclude arithmetic, which is exactly where GPT-2's greedy hits are (2 of 5
-prompts). Temperature buys you roughly an order of magnitude, not immunity.
+Greedy is **not zero**: at argmax across 99 generations from four models, 6
+contained a non-canonical span — the model's *most likely* continuation is
+sometimes a non-canonical token. (An 8-prompt subset reads 0% at greedy; the
+full 25-prompt set does not, because GPT-2's greedy hits are concentrated in
+arithmetic prompts.) Temperature moves the rate roughly an order of magnitude,
+from 0.08% at greedy to 3–4% at 1.5.
 
 ![Non-canonical rate vs temperature](figures/phase2_temperature.png)
 
@@ -167,6 +155,35 @@ Llama-3.1-8B's, which include code-switching around genuine Russian and
 Japanese. That plausibly explains its position.
 
 ![Non-canonical generation falls with scale](figures/phase2_scale.png)
+
+**And at the actual frontier?** Closed and giant open models are measurable
+without weights: chat-completions logprobs return each sampled token's exact
+bytes, so the round-trip check runs client-side against the public tokenizer
+(`phase2_api.py`, `phase2_openrouter.py`). Per-generation fidelity checks catch
+broken providers — one backend returned garbage logprobs that would otherwise
+have read as a fake 0%. The measurement is asymmetric: a nonzero rate is hard to
+fake, a zero rate is ambiguous with provider-side re-serialization.
+
+| frontier model | pooled per-token |
+|---|---:|
+| gpt-4o / gpt-4.1 (+ minis) | ≤0.014% |
+| Qwen3-235B-A22B-2507 | 0% observed in 23k tokens |
+| **DeepSeek V3-0324 / V3.1** | **0.39% / 0.38%** |
+
+A **40× spread among current frontier models** — the rate is
+lineage-dependent, not uniformly vanishing. The two DeepSeek generations
+replicate each other, and V3.1 is nonzero even on English (0.17%, vs
+0.00–0.03% for every other modern model here); its spans are mostly
+punctuation–newline boundary splits. Everything in one picture:
+
+![All 17 models, 2019–2025: falling but lineage-dependent](figures/phase2_overview.png)
+
+**Reasoning-model token streams are not externally measurable.** gpt-5 refuses
+logprobs outright ("You are not allowed to request logprobs from this model"),
+and every reasoning model served through OpenRouter (gpt-oss, R1,
+Qwen3-thinking) returns its trace in a separate field carrying no logprobs. So
+**reasoning traces — where RL pressure concentrates and where monitors read —
+are externally unmeasurable on every serving path we found.**
 
 **Report the length, and report per-token.** The per-*generation* rate — "did
 this sample contain a non-canonical span?" — is a strong function of how long
@@ -210,6 +227,18 @@ Compliance is modest and varies sharply by model — models add quotes and
 explanations, so the bare target is emitted in only 41/80 concat trials for
 Llama-3.2-1B (51%) and 8/80 for Qwen2.5-1.5B (10%). The honest claim is "reliable **when** it
 complies."
+
+**And it does not transfer to frontier models — at all.** The same probe on
+every API-measurable frontier model (gpt-4o/4.1 lines, DeepSeek-V3.1,
+Qwen3-235B; `phase2_induce_api.py`) gets 97–100% compliance, which removes the
+small models' limiting factor and cleanly isolates the tokenization question:
+**0 induced of 294 compliant productions.** Given the ideal semantic setup,
+frontier models emit the canonical compound every time. Combined with the rate
+table, the frontier picture is two-axis: DeepSeek emits non-canonical tokens
+*spontaneously* but cannot be *steered* into targeted splits; the OpenAI and
+Qwen lines neither emit nor accept them. **On this prompt, induction is a small-model
+phenomenon.** A harder search — GCG-style discrete optimization, soft prompts —
+was not attempted.
 
 This matters mainly as a statement about mechanism. A policy wouldn't need to
 learn anything about tokenization to drift into non-canonical space — only to
@@ -256,44 +285,6 @@ question**, and lists "can the model steer itself... while evading CoT monitors?
 as the one item its own preliminary experiments have *not* touched. §3 above is a
 direct empirical answer to the first, and a partial one to the second.
 
-## Why instrument now, when the rate is falling
-
-Everything above is accidental, and finding 2 says it's getting rarer. The reason
-to instrument anyway is a regime that would select for it.
-
-Consider outcome-based RL with a monitor in the loop. If the monitor consumes
-**re-tokenized text** — the default, per the serving path above — while the policy
-is optimized over **actual token sequences**, then segmentation is a degree of
-freedom the reward signal's monitor cannot see. Anything that survives the round
-trip is unpenalized. That's the standard shape of a specification gap: not
-deception, just an axis the overseer is blind to.
-
-This is a **structural argument, not an observation** — we have not demonstrated
-segmentation-level reward hacking, and nothing in our measurements implies
-current models do it. But §3 shows a policy wouldn't need to learn anything
-*about tokenization* to move into this space; it would only need to conceptualise
-its output in pieces. And the instrumentation that would let you detect it is the
-same instrumentation asked for above, for ordinary validity reasons. It has to be
-running *before* the training run you'd want it for.
-
-## Asks
-
-**1. Retain the token IDs your models emit, and monitor the non-canonical
-rate.** How far to take this depends on what you're doing. **Interpretability
-work should store and analyze the real tokens** — that's the case where a
-re-encoded transcript directly invalidates the analysis. For **training**,
-monitoring the rate may be enough on its own; it's the series that would reveal a
-policy drifting into this space, and it has to exist before the run you'd want it
-for. For **live inference** it may not matter much at all. The check itself is a
-one-line comparison, so the monitoring is close to free regardless.
-
-**2. Someone should search prompt space properly.** We found one lever by hand
-and stopped. The version worth doing is a mix of both halves: broad prompting
-(more phrasings, other languages, non-compound targets) *and* directly optimizing
-the prompts that work with adversarial techniques — GCG-style discrete search, or
-soft prompts, against a canonicality objective. That's the experiment that decides
-whether this stays a validity bug or becomes a channel, and we haven't run it.
-
 ## Limitations
 
 - The toy's magnitude is **constructed by design** — we chose the vocabulary and
@@ -321,12 +312,15 @@ whether this stays a validity bug or becomes a channel, and we haven't run it.
   claim is that a probe on the stored transcript reads near-chance for something
   the model provably computed — a false negative in the analysis, not a fact
   that has gone missing.
-- **Small N is the main statistical weakness.** Small open models (≤20B), a few
-  hundred generations per cell, one seed, short completions. The confident-flip
+- **Small N is the main statistical weakness.** A few hundred generations per
+  cell, one seed, short completions; the API rows add frontier coverage but at
+  68–100 generations per model, under provider-default sampling truncation and
+  mixed quantization (both of which suppress tail tokens, so those rates are
+  conservative). The confident-flip
   rate rests on a handful of events; we give raw counts and Wilson intervals
   rather than bare percentages, and the intervals are wide. Read the rates as
-  order-of-magnitude. We got burned by this once already: an early Qwen reading
-  of 0% was 0-of-64 and did not survive re-measurement at n=300.
+  order-of-magnitude. (An early Qwen reading of 0% at 0-of-64 did not survive
+  re-measurement at n=300 — zeros need the same N as nonzero results.)
 - The **qualitative orderings** (temperature dependence, multilingual ≫ English,
   rate falling with scale) are what we'd defend; individual cells are not precise.
 - The interp-mismatch metric is a **next-token divergence at a boundary** — a
@@ -373,6 +367,4 @@ uv run python -m retok.phase2_verify data/retok/artifacts/*.jsonl
 ```
 
 That recomputes canonicality from the raw IDs rather than trusting our stored
-flags, so every rate above is checkable independently of our generation step. It
-would also be odd to argue that labs should retain the token IDs their models
-emit and then not do so ourselves.
+flags, so every rate above is checkable independently of our generation step.

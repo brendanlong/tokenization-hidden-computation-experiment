@@ -12,62 +12,22 @@ rise steeply with it; the first predicts ~0 at any temperature. This script
 sweeps temperature per model and reports the non-canonical rate, which
 distinguishes them.
 
-Run (GPU):
-    uv run python -m retok.phase2_temperature --jsonl-dir data/retok/artifacts
-
-Re-derive the table from saved records (CPU only, recomputes canonicality from
-the raw token IDs rather than trusting the stored flags; ``hf:`` paths read the
-published dataset):
-
-    uv run python -m retok.phase2_temperature \\
-        --from-jsonl hf:temperature_meta-llama_Llama-3.2-1B-Instruct.jsonl
+Run:
+    uv run python -m retok.phase2_temperature
 """
 
 from __future__ import annotations
 
 import argparse
-import json
-from collections import defaultdict
-from pathlib import Path
 
-from retok.phase2_probe import PROMPTS, decode_for_roundtrip, diff_spans
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-# The fixed prompt set across temperatures (code+multilingual: where spans live).
-SWEEP_PROMPTS = ("code", 4), ("multilingual_latin", 4)
+from common.gpu import resolve_device
+from retok.phase2_probe import PROMPTS, diff_spans
 
 
-def _sweep_prompts() -> list[tuple[str, str]]:
-    return [(d, p) for d, n in SWEEP_PROMPTS for p in PROMPTS[d][:n]]
-
-
-def _summarise(model_name: str, records: list[dict[str, object]]) -> None:
-    """Print the per-temperature table from generation records.
-
-    Recomputes nothing model-side — canonicality is re-derived from the stored
-    token IDs by the caller (``verify_records``) or was just measured live.
-    """
-    # temperature -> [n_noncanon, n_total, noncanon_tok, total_tok]
-    agg: dict[float, list[int]] = defaultdict(lambda: [0, 0, 0, 0])
-    for rec in records:
-        if rec["excluded"]:
-            continue
-        t = agg[float(rec["temperature"])]  # type: ignore[arg-type]
-        t[1] += 1
-        t[3] += len(rec["generated_ids"])  # type: ignore[arg-type]
-        if rec["non_canonical"]:
-            t[0] += 1
-            t[2] += sum(len(s["actual"]) for s in rec["spans"])  # type: ignore[index]
-    print(f"\n===== {model_name} =====")
-    print(f"{'temp':>6}{'non-canon':>12}{'gens':>7}{'per-gen':>9}{'per-token':>11}")
-    for temp in sorted(agg):
-        n_noncanon, n_total, noncanon_tok, total_tok = agg[temp]
-        per_gen = n_noncanon / max(1, n_total)
-        per_tok = noncanon_tok / max(1, total_tok)
-        print(
-            f"{temp:>6.1f}{n_noncanon:>12}{n_total:>7}{per_gen:>8.0%}{per_tok:>10.2%}"
-        )
-
-
+@torch.no_grad()
 def sweep(
     model_name: str,
     temperatures: list[float],
@@ -75,13 +35,7 @@ def sweep(
     n_samples: int,
     max_new_tokens: int,
     seed: int,
-    jsonl_out: Path | None = None,
 ) -> None:
-    import torch
-    from transformers import AutoModelForCausalLM, AutoTokenizer
-
-    from common.gpu import resolve_device
-
     device = resolve_device(require_cuda=False)
     tokenizer = AutoTokenizer.from_pretrained(model_name)
     model = AutoModelForCausalLM.from_pretrained(
@@ -89,148 +43,70 @@ def sweep(
     )
     model.eval()
     use_chat = tokenizer.chat_template is not None
+    # A fixed prompt set across temperatures (code+multilingual: where spans live)
+    prompts = PROMPTS["code"][:4] + PROMPTS["multilingual_latin"][:4]
 
-    records: list[dict[str, object]] = []
-    with torch.no_grad():
-        for temp in temperatures:
-            torch.manual_seed(seed)
-            for domain, prompt in _sweep_prompts():
-                text = (
-                    tokenizer.apply_chat_template(
-                        [{"role": "user", "content": prompt}],
-                        tokenize=False,
-                        add_generation_prompt=True,
-                    )
-                    if use_chat
-                    else prompt
+    print(f"\n===== {model_name} =====")
+    print(f"{'temp':>6}{'non-canon':>12}{'gens':>7}{'per-gen':>9}{'per-token':>11}")
+    for temp in temperatures:
+        torch.manual_seed(seed)
+        n_noncanon = 0
+        n_total = 0
+        noncanon_tok = 0
+        total_tok = 0
+        for prompt in prompts:
+            text = (
+                tokenizer.apply_chat_template(
+                    [{"role": "user", "content": prompt}],
+                    tokenize=False,
+                    add_generation_prompt=True,
                 )
-                enc = tokenizer(text, return_tensors="pt").to(device)
-                plen = enc.input_ids.shape[1]
-                greedy = temp <= 0.0
-                out = model.generate(
-                    **enc,
-                    max_new_tokens=max_new_tokens,
-                    do_sample=not greedy,
-                    **(
-                        {}
-                        if greedy
-                        else {
-                            "temperature": temp,
-                            "top_k": 0,
-                            "top_p": 1.0,
-                            "repetition_penalty": 1.0,
-                        }
-                    ),
-                    num_return_sequences=1 if greedy else n_samples,
-                    pad_token_id=tokenizer.eos_token_id,
-                )
-                for seq in out:
-                    gen = seq[plen:].tolist()
-                    while gen and gen[-1] in (
-                        tokenizer.eos_token_id,
-                        tokenizer.pad_token_id,
-                    ):
-                        gen.pop()
-                    if not gen:
-                        continue
-                    rec: dict[str, object] = {
-                        "model": model_name,
-                        "domain": domain,
-                        "prompt": prompt,
-                        "seed": seed,
+                if use_chat
+                else prompt
+            )
+            enc = tokenizer(text, return_tensors="pt").to(device)
+            plen = enc.input_ids.shape[1]
+            greedy = temp <= 0.0
+            out = model.generate(
+                **enc,
+                max_new_tokens=max_new_tokens,
+                do_sample=not greedy,
+                **(
+                    {}
+                    if greedy
+                    else {
                         "temperature": temp,
-                        "generated_ids": gen,
+                        "top_k": 0,
+                        "top_p": 1.0,
+                        "repetition_penalty": 1.0,
                     }
-                    result = diff_spans(tokenizer, gen)
-                    if result is None:
-                        # confounded round trip (U+FFFD / non-NFC)
-                        rec.update(excluded=True, non_canonical=False, spans=[])
-                    else:
-                        canon_ids, spans = result
-                        rec.update(
-                            excluded=False,
-                            non_canonical=bool(spans),
-                            canonical_ids=canon_ids,
-                            text=decode_for_roundtrip(tokenizer, gen),
-                            spans=[
-                                {
-                                    "surface": sp.surface,
-                                    "actual": sp.actual_tokens,
-                                    "canonical": sp.canonical_tokens,
-                                }
-                                for sp in spans
-                            ],
-                        )
-                    records.append(rec)
-    _summarise(model_name, records)
-    if jsonl_out is not None:
-        jsonl_out.parent.mkdir(parents=True, exist_ok=True)
-        with jsonl_out.open("w") as fh:
-            for rec in records:
-                fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
-        print(f"Wrote {len(records)} generation records to {jsonl_out}")
-
-
-def verify_records(paths: list[str]) -> int:
-    """CPU re-derivation: recompute canonicality from the stored token IDs.
-
-    The printed table comes from the *recomputed* values, not the stored flags
-    (which are only compared against them), so a tampered or drifted file both
-    prints correctly and fails. Returns a nonzero exit code on any mismatch, so
-    CI and `set -e` scripts actually fail on drift.
-    """
-    from transformers import AutoTokenizer
-
-    from common.artifacts import resolve_record_path
-
-    exit_code = 0
-    for pathlike in paths:
-        path = Path(resolve_record_path(pathlike))
-        records = [json.loads(x) for x in path.read_text().splitlines() if x]
-        if not records:
-            print(f"{path}: EMPTY")
-            continue
-        model_name = records[0]["model"]
-        try:
-            tokenizer = AutoTokenizer.from_pretrained(model_name)
-        except OSError as e:
-            print(f"\n===== {model_name} =====")
-            print(f"  SKIPPED — could not load tokenizer: {type(e).__name__}")
-            print("  (gated repo? accept the license and `huggingface-cli login`)")
-            continue
-        mismatches = 0
-        recomputed: list[dict[str, object]] = []
-        for rec in records:
-            ids = rec["generated_ids"]
-            result = diff_spans(tokenizer, ids)
-            rec2: dict[str, object] = {
-                "temperature": rec["temperature"],
-                "generated_ids": ids,
-            }
-            if result is None:
-                rec2.update(excluded=True, non_canonical=False, spans=[])
-            else:
+                ),
+                num_return_sequences=1 if greedy else n_samples,
+                pad_token_id=tokenizer.eos_token_id,
+            )
+            for seq in out:
+                gen = seq[plen:].tolist()
+                while gen and gen[-1] in (
+                    tokenizer.eos_token_id,
+                    tokenizer.pad_token_id,
+                ):
+                    gen.pop()
+                if not gen:
+                    continue
+                result = diff_spans(tokenizer, gen)
+                if result is None:
+                    continue
                 _, spans = result
-                rec2.update(
-                    excluded=False,
-                    non_canonical=bool(spans),
-                    spans=[{"actual": sp.actual_tokens} for sp in spans],
-                )
-            recomputed.append(rec2)
-            if rec2["excluded"] != rec["excluded"] or (
-                rec2["non_canonical"] != rec["non_canonical"]
-            ):
-                mismatches += 1
-        _summarise(model_name, recomputed)
-        status = (
-            "OK — recomputed canonicality matches the stored flags exactly"
-            if mismatches == 0
-            else f"MISMATCH — {mismatches} records disagree with recomputation"
+                n_total += 1
+                total_tok += len(gen)
+                if spans:
+                    n_noncanon += 1
+                    noncanon_tok += sum(len(s.actual_tokens) for s in spans)
+        per_gen = n_noncanon / max(1, n_total)
+        per_tok = noncanon_tok / max(1, total_tok)
+        print(
+            f"{temp:>6.1f}{n_noncanon:>12}{n_total:>7}{per_gen:>8.0%}{per_tok:>10.2%}"
         )
-        print(f"  {status}")
-        if mismatches:
-            exit_code = 1
-    return exit_code
 
 
 def main() -> None:
@@ -249,35 +125,14 @@ def main() -> None:
     parser.add_argument("--n-samples", type=int, default=6)
     parser.add_argument("--max-new-tokens", type=int, default=160)
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument(
-        "--jsonl-dir",
-        help="Write per-model generation records to "
-        "<dir>/temperature_<model>.jsonl (the published-artifact format)",
-    )
-    parser.add_argument(
-        "--from-jsonl",
-        nargs="+",
-        metavar="PATH",
-        help="No GPU: re-derive the table from saved records, recomputing "
-        "canonicality from the raw token IDs. hf:<name> reads the published "
-        "dataset.",
-    )
     args = parser.parse_args()
-    if args.from_jsonl:
-        raise SystemExit(verify_records(args.from_jsonl))
     for model_name in args.models:
-        jsonl_out = (
-            Path(args.jsonl_dir) / f"temperature_{model_name.replace('/', '_')}.jsonl"
-            if args.jsonl_dir
-            else None
-        )
         sweep(
             model_name,
             args.temperatures,
             n_samples=args.n_samples,
             max_new_tokens=args.max_new_tokens,
             seed=args.seed,
-            jsonl_out=jsonl_out,
         )
 
 
