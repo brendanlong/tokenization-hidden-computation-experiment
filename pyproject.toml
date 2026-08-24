@@ -23,6 +23,11 @@ dependencies = [
     "wandb>=0.19",
     # Published checkpoints + generation records
     "huggingface-hub>=0.25",
+    # phase2_api: client-side canonicalization of OpenAI-tokenizer output
+    "tiktoken>=0.7",
+    # retok_rl: GRPO training + prompt dataset
+    "trl>=0.24",
+    "datasets>=3.0",
 ]
 
 [dependency-groups]
@@ -52,7 +57,7 @@ select = [
 ignore = []
 
 [tool.ruff.lint.isort]
-known-first-party = ["common", "retok"]
+known-first-party = ["common", "retok", "retok_rl"]
 
 [tool.pytest.ini_options]
 markers = [
@@ -74,7 +79,7 @@ exclude = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["common", "retok"]
+packages = ["common", "retok", "retok_rl"]
 
 [build-system]
 requires = ["hatchling"]

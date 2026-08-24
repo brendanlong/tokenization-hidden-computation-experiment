@@ -259,22 +259,23 @@ def plot_scale_ladder(out_path: Path) -> None:
     print(f"Wrote {out_path}")
 
 
-# Temperature sweep (code+Latin-multilingual prompts, 48 gens per sampled cell;
-# the temp-0 cell is 8 deterministic gens, since greedy repeats). This is the
-# 2026-08-19 re-measurement whose per-generation records are published as
-# temperature_<model>.jsonl — re-derive every value on CPU with
-# `python -m retok.phase2_temperature --from-jsonl hf:temperature_<model>.jsonl`.
+# Temperature sweep (code+multilingual prompts, 48 gens/cell; the temp-0 cell is
+# 8 deterministic gens, since greedy repeats). See RESULTS.md.
 #
-# NOTE the temp-0 point is not a structural zero: Qwen's greedy decode contains
-# spans even on these 8 prompts in this run (2/8 gens, 0.34%/tok), and greedy
-# over the full 25-prompt set finds 0.08% pooled across four models
-# (RESULTS.md, "Greedy decoding is NOT 0%"). The annotation carries this.
+# NOTE the temp-0 zeros below are subset-limited, not a true zero: re-running
+# greedy over the full 25-prompt set finds 0.08% pooled across four models
+# (RESULTS.md, "Greedy decoding is NOT 0%"). The 8-prompt sweep set contains no
+# arithmetic prompts, which is where GPT-2's greedy hits are. Kept as measured
+# so this curve stays one internally-consistent experiment; the annotation on
+# the plot carries the correction.
 PHASE2_TEMPS = [0.0, 0.7, 1.0, 1.5, 2.0]
-# CONTROLLED (pure sampling). Per-token % (we report per-token everywhere; the
-# per-generation rate saturates with length and isn't comparable).
-PHASE2_TEMP_RATES = {
-    "Llama-3.2-1B": ([0.00, 0.03, 0.94, 3.43, 4.38], "#0072B2"),
-    "Qwen2.5-1.5B": ([0.34, 0.15, 0.55, 2.94, 5.89], "#009E73"),
+# CONTROLLED (pure sampling). Per-generation here is fine: it's a within-model
+# comparison at FIXED generation length, so the length-saturation problem that
+# rules per-generation out for cross-domain comparison doesn't apply.
+PHASE2_TEMP_RATES = {  # per-TOKEN % (we report per-token everywhere; the
+    # per-generation rate saturates with length and isn't comparable)
+    "Llama-3.2-1B": ([0.00, 0.22, 0.95, 3.68, 4.30], "#0072B2"),
+    "Qwen2.5-1.5B": ([0.00, 0.22, 0.42, 3.33, 3.77], "#009E73"),
 }
 
 
@@ -297,21 +298,20 @@ def plot_temperature(out_path: Path) -> None:
     ax.set_xticks(PHASE2_TEMPS)
     ax.set_xlabel("sampling temperature")
     ax.set_ylabel("emitted tokens that are non-canonical (%)")
-    ax.set_ylim(-0.2, 6.3)
+    ax.set_ylim(-0.2, 5.0)
     ax.set_title(
         "Non-canonical generation is largely a tail-sampling effect\n"
-        "Low but nonzero under greedy decoding; ~3% of tokens by temperature 1.5",
+        "~0.1% under greedy decoding; 3-4% of tokens by temperature 1.5",
         fontsize=10.5,
         loc="left",
     )
-    # Greedy is low but NOT a structural zero — on this run Qwen already emits
-    # spans at temperature 0, and the full 25-prompt greedy set finds 6/99.
+    # The 0.0 points read as an exact zero, which a wider prompt set refutes.
     ax.annotate(
-        "greedy: 0/8 gens (Llama) but 2/8 (Qwen)\n"
-        "on these prompts; 0.08% of tokens over\n"
-        "the full 25-prompt set — low, not immune",
-        xy=(0.0, 0.34),
-        xytext=(0.28, 1.75),
+        "greedy is 0% on these 8 prompts, but\n"
+        "0.08% over the full 25-prompt set\n"
+        "(6/99 gens) — low, not immune",
+        xy=(0.0, 0.0),
+        xytext=(0.28, 1.45),
         fontsize=8.2,
         color=MUTED,
         arrowprops={"arrowstyle": "->", "color": MUTED, "linewidth": 0.9},
@@ -329,14 +329,10 @@ def plot_temperature(out_path: Path) -> None:
 
 
 # Length dependence, computed by truncating the published generations to N
-# tokens and re-running the round trip. Only generations with >= N tokens are
-# kept at each N (so every column compares sequences of the same length), and
-# measurability (the U+FFFD / non-NFC exclusions) is re-derived on the
-# truncated text rather than read from the stored flag. Per-GENERATION rises
-# steeply with N (BPE is non-recovering: once a sequence goes off-canonical
-# every extension stays off-canonical, so the flag can only accumulate).
-# Per-TOKEN is roughly flat, which is why we report it. Every cell re-verified
-# exactly against the published artifacts 2026-08-18.
+# tokens and re-running the round trip. Per-GENERATION rises steeply with N
+# (BPE is non-recovering: once a sequence goes off-canonical every extension
+# stays off-canonical, so the flag can only accumulate). Per-TOKEN is roughly
+# flat, which is why we report it. Recomputed 2026-08-18.
 LENGTH_N = [32, 64, 128, 200]
 LENGTH_SERIES = {
     "GPT-2": ([20, 34, 53, 64], [1.58, 1.57, 1.72, 1.67], "#E69F00"),
@@ -403,6 +399,118 @@ def plot_length_dependence(out_path: Path) -> None:
     print(f"Wrote {out_path}")
 
 
+# Overview: every model measured in this project, one metric, one prompt set.
+# Values recomputed by `python -m retok.phase2_overview` (pooled
+# per-token, aligned diff, the 25-prompt set at temp 1.0); floors are 1/tokens
+# for models with zero observed non-canonical tokens. Dates are public release
+# months. API rows ran under provider-default sampling truncation and mixed
+# quantization, so they are conservative (tail truncation suppresses the rate).
+# (name, release date, rate %, floor % or None, lineage, x-offset, y-mult)
+OVERVIEW = [
+    ("GPT-2", 2019.12, 1.659, None, "gpt2", 0.0, 1.35),
+    ("Llama-2-7B", 2023.54, 0.104, None, "llama", 0.0, 1.35),
+    ("Gemma-1-2B", 2024.13, 0.624, None, "gemma", 0.0, 1.35),
+    ("gpt-4o", 2024.37, 0.0, 0.0042, "closed", 0.0, 0.62),
+    ("Gemma-2-2b", 2024.49, 0.242, None, "gemma", -0.5, 0.78),
+    ("gpt-4o-mini", 2024.54, 0.008, None, "closed", -0.1, 1.4),
+    ("Llama-3.1-8B", 2024.56, 0.262, None, "llama", 0.55, 1.12),
+    ("Qwen2.5-1.5B", 2024.72, 0.240, None, "qwen", -0.12, 0.55),
+    ("Llama-3.2-1B", 2024.73, 0.956, None, "llama", 0.0, 1.35),
+    ("Llama-3.2-3B", 2024.73, 0.516, None, "llama", 0.42, 1.12),
+    ("Gemma-3-4B", 2025.19, 0.037, None, "gemma", -0.2, 1.35),
+    ("DeepSeek-V3", 2025.23, 0.390, None, "deepseek", 0.3, 0.58),
+    ("gpt-4.1", 2025.28, 0.009, None, "closed", 0.15, 0.6),
+    ("gpt-4.1-mini", 2025.28, 0.014, None, "closed", 0.28, 1.35),
+    ("Qwen3-235B", 2025.55, 0.0, 0.0043, "qwen", 0.0, 0.62),
+    ("gpt-oss-20b", 2025.60, 0.034, None, "oss", 0.1, 1.35),
+    ("DeepSeek-V3.1", 2025.63, 0.378, None, "deepseek", 0.25, 1.3),
+]
+LINEAGE_COLORS = {
+    "gpt2": "#E69F00",
+    "llama": "#0072B2",
+    "gemma": "#CC79A7",
+    "qwen": "#009E73",
+    "closed": "#999999",
+    "oss": "#333333",
+    "deepseek": "#D55E00",
+}
+# Within-lineage connections (tokenizer + recipe held roughly fixed).
+OVERVIEW_LINES = [
+    ("llama", ["Llama-3.2-1B", "Llama-3.2-3B", "Llama-3.1-8B"]),
+    ("gemma", ["Gemma-1-2B", "Gemma-2-2b", "Gemma-3-4B"]),
+    ("qwen", ["Qwen2.5-1.5B", "Qwen3-235B"]),
+    ("closed", ["gpt-4o", "gpt-4.1"]),
+    ("deepseek", ["DeepSeek-V3", "DeepSeek-V3.1"]),
+]
+
+
+def plot_overview(out_path: Path) -> None:
+    """Hero overview: 17 models, 2019-2025, one metric, log rate vs date."""
+    fig, ax = plt.subplots(figsize=(9.6, 5.4))
+    ax.set_facecolor(SURFACE)
+    fig.patch.set_facecolor("white")
+    by_name = {m[0]: m for m in OVERVIEW}
+    for lineage, names in OVERVIEW_LINES:
+        pts = [(by_name[n][1], by_name[n][2] or by_name[n][3]) for n in names]
+        ax.plot(
+            *zip(*pts, strict=True),
+            color=LINEAGE_COLORS[lineage],
+            linewidth=1.4,
+            alpha=0.45,
+            zorder=2,
+        )
+    for name, date, rate_, floor, lineage, dx, ym in OVERVIEW:
+        colour = LINEAGE_COLORS[lineage]
+        if floor is not None:  # zero observed: plot AT the detection floor
+            ax.scatter(
+                date,
+                floor,
+                s=70,
+                facecolors="none",
+                edgecolors=colour,
+                marker="v",
+                linewidths=1.6,
+                zorder=3,
+            )
+            y = floor
+        else:
+            ax.scatter(date, rate_, s=56, color=colour, zorder=3)
+            y = rate_
+        ax.annotate(
+            name,
+            xy=(date, y),
+            xytext=(date + dx, y * ym),
+            fontsize=7.8,
+            color=colour,
+            ha="center",
+            zorder=4,
+        )
+    ax.set_yscale("log")
+    ax.set_ylim(0.0025, 4.0)
+    ax.set_yticks([0.003, 0.01, 0.03, 0.1, 0.3, 1, 3])
+    ax.set_yticklabels(["0.003%", "0.01%", "0.03%", "0.1%", "0.3%", "1%", "3%"])
+    ax.set_xlim(2018.7, 2026.3)
+    ax.set_xticks([2019, 2023, 2024, 2025, 2026])
+    ax.set_xlabel("model release date")
+    ax.set_ylabel("emitted tokens that are non-canonical (log scale)")
+    ax.set_title(
+        "Non-canonical output, 2019 \u2192 2025: falling, but lineage-dependent\n"
+        "Same 25 prompts, temp 1.0, pooled per-token. Hollow \u25bd = zero "
+        "observed, plotted at the detection floor (1/tokens measured)",
+        fontsize=10.5,
+        loc="left",
+    )
+    ax.grid(True, which="both", color="#e8e8e6", linewidth=0.7, zorder=0)
+    for sp in ("top", "right"):
+        ax.spines[sp].set_visible(False)
+    for sp in ("left", "bottom"):
+        ax.spines[sp].set_color("#cccccc")
+    fig.tight_layout()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    print(f"Wrote {out_path}")
+
+
 def plot_phase2_rates(out_path: Path) -> None:
     n_models = len(PHASE2_RATES)
     x = list(range(len(PHASE2_DOMAINS)))
@@ -454,13 +562,10 @@ def plot_phase2_rates(out_path: Path) -> None:
     print(f"Wrote {out_path}")
 
 
-# Causal-contamination decay (phase2_decay, Llama-3.2-1B, 60 spans; the
-# 2026-08-19 re-measurement whose per-generation records are published as
-# decay_meta-llama_Llama-3.2-1B-Instruct.jsonl — re-derive this table on CPU
-# with `python -m retok.phase2_decay --from-jsonl hf:decay_<model>.jsonl`).
+# Causal-contamination decay (phase2_decay, Llama-3.2-1B, 49 spans).
 DECAY_D = [0, 1, 2, 4, 8, 16, 32, 64]
-DECAY_MEDKL = [0.392, 0.118, 0.043, 0.014, 0.012, 0.005, 0.002, 0.004]
-DECAY_FLIP = [50, 39, 27, 16, 18, 15, 7, 12]
+DECAY_MEDKL = [0.227, 0.062, 0.025, 0.016, 0.007, 0.004, 0.003, 0.002]
+DECAY_FLIP = [50, 27, 14, 20, 12, 9, 11, 15]
 
 
 def plot_decay(out_path: Path) -> None:
@@ -490,7 +595,7 @@ def plot_decay(out_path: Path) -> None:
     )
     ax1.set_yscale("log")
     ax1.set_ylabel("median next-token KL (nats)")
-    ax1.set_title("Magnitude dilutes ~78x by 16 tokens", fontsize=10, loc="left")
+    ax1.set_title("Magnitude dilutes ~100x by 16 tokens", fontsize=10, loc="left")
 
     ax2.plot(
         DECAY_D,
@@ -508,7 +613,7 @@ def plot_decay(out_path: Path) -> None:
         fontsize=10,
         loc="left",
     )
-    ax2.axhspan(7, 15, color=ORANGE, alpha=0.10, zorder=1)
+    ax2.axhspan(9, 15, color=ORANGE, alpha=0.10, zorder=1)
 
     fig.suptitle(
         "A single non-canonical token perturbs every later position",
@@ -741,6 +846,7 @@ def main() -> None:
     plot_decay(figdir / "phase2_decay.png")
     plot_scale_ladder(figdir / "phase2_scale.png")
     plot_length_dependence(figdir / "phase2_length.png")
+    plot_overview(figdir / "phase2_overview.png")
 
 
 if __name__ == "__main__":
