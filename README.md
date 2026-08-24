@@ -92,6 +92,8 @@ retok/                  the experiment
   eval_sweep.py         CPU re-evaluation of the published width-sweep checkpoints
   figures.py            all figures
   tests/                CPU tests for the tokenizer, task and dataset plumbing
+retok_rl/               follow-up: GRPO on decimal expansion — does RL move the
+                        policy off canonical tokenization? (plan, code, run log)
 common/                 training harness vendored from the source monorepo
   artifacts.py          resolve published checkpoints/records from the HF dataset
   streaming.py          worker seeding/sharding for generated data

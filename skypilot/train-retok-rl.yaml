@@ -1,0 +1,111 @@
+# GRPO on decimal expansion: does RL move the policy off canonical tokenization?
+#
+#   sky launch skypilot/train-retok-rl.yaml -c retok-rl --infra runpod \
+#       --down --yes --retry-until-up \
+#       --secret WANDB_API_KEY --secret AWS_ACCESS_KEY_ID --secret AWS_SECRET_ACCESS_KEY \
+#       --env RUN_NAME=retok-rl-beta0
+#
+# GPT-2 is 124M, so this is compute-light and VRAM-light -- the accelerator list
+# below is deliberately wide and cheap-first, because on RunPod the binding
+# constraint is availability, not capability. `--retry-until-up` rides out
+# capacity blips.
+#
+# Results sync to S3 *periodically*, not only at exit: a spot preemption or
+# balance-out SIGKILLs the pod, skipping any EXIT trap, and the local disk dies
+# with it.
+
+name: retok-rl
+
+resources:
+  # Cheapest-first; any of these is ample for a 124M model. RTX 3090 is ~$0.22/hr
+  # community, A40 ~$0.35. Listing several means SkyPilot can fall back rather
+  # than fail when one type is out of stock.
+  accelerators: {RTX3090: 1, RTX4090: 1, A40: 1, RTX4080: 1, L4: 1, A10G: 1}
+  use_spot: false          # unmanaged task: a preemption would lose the run
+  disk_size: 60
+  image_id: docker:runpod/pytorch:2.8.0-py3.11-cuda12.8.1-cudnn-devel-ubuntu22.04
+
+workdir: .
+
+setup: |
+  pip install uv awscli -q
+  # Pin 3.12: the base image resolves 3.14, where `dill` (used by `datasets`
+  # for fingerprinting) raises
+  #   TypeError: _Pickler._batch_setitems() missing 1 required positional argument
+  # pyproject allows >=3.12, so uv is free to pick 3.14 unless told otherwise.
+  uv python install 3.12
+  uv sync --python 3.12 --directory ~/sky_workdir
+
+run: |
+  cd ~/sky_workdir
+  export REQUIRE_CUDA=1
+  export PYTORCH_ALLOC_CONF=expandable_segments:True
+
+  # Fail fast on a bad host rather than burning the run. A broken RunPod box
+  # once crash-looped on /dev/dri and sat in INIT for 45 minutes.
+  nvidia-smi || { echo ">>> nvidia-smi failed — bad host, relaunch elsewhere"; exit 1; }
+  uv run python -m common.gpu --require-cuda || {
+    echo ">>> CUDA not usable on this host — relaunch to land elsewhere"; exit 1; }
+
+  # Report which credentials actually arrived, before anything can exit early.
+  # Lengths only, never values.
+  echo ">>> creds seen by the task: HF_TOKEN=${#HF_TOKEN} chars," \
+       "AWS_ACCESS_KEY_ID=${#AWS_ACCESS_KEY_ID} chars," \
+       "WANDB_API_KEY=${#WANDB_API_KEY} chars"
+
+  RUN_NAME="${RUN_NAME:-${SKYPILOT_TASK_ID:-retok-rl}}"
+  OUT=/tmp/retok_rl/${RUN_NAME}
+  mkdir -p "${OUT}"
+
+  # Results stay on the pod; copy them back with `sky rsync` (or add your own
+  # sync). The private-monorepo version syncs to S3 here.
+
+  # Smoke first: a few steps proves the reward wiring and the metrics callback
+  # before we pay for the real run.
+  if [ "${SMOKE:-0}" = "1" ]; then
+    uv run python -m retok_rl.train --model "${MODEL}" \
+      --steps 6 --eval-every 3 --eval-samples 2 --batch-size 4 \
+      --num-generations 4 --places 12 --no-wandb 2>&1 | tee "${OUT}/smoke.txt"
+    rc=${PIPESTATUS[0]}
+    echo ">>> smoke exited ${rc}"
+    exit "${rc}"
+  fi
+
+  # Tracking is optional: a missing WANDB_API_KEY should not kill a GPU run.
+  # (It did once — the trainer defaults to wandb on, and the launch omitted the
+  # secret, so the job died at init before training started.)
+  WANDB_FLAG=""
+  if [ -z "${WANDB_API_KEY:-}" ]; then
+    echo ">>> no WANDB_API_KEY — running with --no-wandb"
+    WANDB_FLAG="--no-wandb"
+  fi
+
+  # Capture the training status so a successful upload cannot mask a crash.
+  # Do NOT call `huggingface-cli login`: it runs whoami(), which 401s for
+  # fine-grained tokens that lack the read-user-info scope even when the same
+  # token can download the gated repo. huggingface_hub reads HF_TOKEN straight
+  # from the environment, which is how the other tasks here authenticate.
+
+  uv run python -m retok_rl.train ${WANDB_FLAG} \
+      --model "${MODEL}" --steps "${STEPS}" --beta "${BETA}" --places "${PLACES}" \
+      --entropy-coef "${ENTROPY_COEF}" ${ADAPTIVE_ENTROPY:+--use-adaptive-entropy} \
+      --wandb-run-name "${RUN_NAME}" 2>&1 | tee "${OUT}/train.txt"
+  rc=${PIPESTATUS[0]}
+  echo ">>> training exited ${rc}"
+  exit "${rc}"
+
+envs:
+  STEPS: "3000"
+  BETA: "0.0"                   # arm A. Arm B: >0, asks whether KL suppresses the drift
+  # Arm A collapsed with entropy_coef=0: entropy fell 4.65 -> 0.004 nats and every
+  # GRPO group had identical rewards by step 250, so the gradient vanished and the
+  # remaining 2750 steps were no-ops. CollapseGuard now aborts that state; this
+  # keeps exploration alive so it should not be reached.
+  ENTROPY_COEF: "0.05"
+  ADAPTIVE_ENTROPY: ""          # set non-empty for adaptive control toward --entropy-target
+  PLACES: "30"
+  SMOKE: "0"
+  RUN_NAME: ""
+  MODEL: "gpt2"
+  HF_TOKEN: ""                  # needed for gated models (Llama)
+  WANDB_API_KEY: ""

@@ -159,6 +159,37 @@ def sync_code(src: Path, dest: Path) -> list[str]:
     return copied
 
 
+def sync_extra_experiment(monorepo: Path, dest: Path, name: str) -> None:
+    """Port a sibling experiment package (e.g. retok_rl) with the same import
+    rewrite. No DIVERGENT/PATCHES yet — if release-side divergence appears,
+    promote it to the same machinery as the main package."""
+    src = monorepo / "experiments" / name
+    if not src.is_dir():
+        print(f">>> {name}: not present upstream, skipped")
+        return
+    pkg = dest / name
+    (pkg / "tests").mkdir(parents=True, exist_ok=True)
+
+    def port(text: str) -> str:
+        text = text.replace(f"experiments.{name}", name)
+        for module in SHARED_MODULES:
+            text = text.replace(f"shared.{module}", f"common.{module}")
+        return text
+
+    n = 0
+    for path in sorted(src.glob("*.py")):
+        (pkg / path.name).write_text(port(path.read_text()))
+        n += 1
+    for path in sorted((src / "tests").glob("*.py")):
+        (pkg / "tests" / path.name).write_text(port(path.read_text()))
+        n += 1
+    for doc in ("EXPERIMENT_PLAN.md", "README.md", "RESULTS.md"):
+        if (src / doc).exists():
+            (pkg / doc).write_text(port((src / doc).read_text()))
+            n += 1
+    print(f">>> {name}: synced {n} files")
+
+
 def sync_docs(src: Path, dest: Path) -> None:
     # WRITEUP: flatten paths, and keep the release's reproduction snippet.
     writeup = rewrite_imports(src.joinpath("WRITEUP.md").read_text())
@@ -240,6 +271,7 @@ def main() -> int:
     if not args.check_only:
         copied = sync_code(src, dest)
         sync_docs(src, dest)
+        sync_extra_experiment(Path(args.monorepo).expanduser(), dest, "retok_rl")
         print(f">>> synced {len(copied)} code files + docs + figures")
 
     if not args.check_only:
