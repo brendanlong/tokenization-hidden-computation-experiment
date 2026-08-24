@@ -38,7 +38,18 @@ SHARED_MODULES = ("checkpoint", "config", "gpu", "schedule", "streaming", "wandb
 
 # Files that carry release-only divergence. Never copied: the release version is
 # authoritative. If upstream changes one of these, a human has to port it.
-DIVERGENT = ("training.py", "train.py", "phase2_verify.py")
+DIVERGENT = (
+    "training.py",
+    "train.py",
+    "phase2_verify.py",
+    # --from-jsonl replay + published-artifact support added release-side for
+    # the CI "verify published rate artifacts" step. A sync with a stale
+    # DIVERGENT list clobbered these once and broke CI — if upstream changes
+    # them, port by hand.
+    "phase2_temperature.py",
+    "phase2_decay.py",
+    "phase2_interp.py",
+)
 
 # Applied after the mechanical rewrite. Each `old` MUST be found, or we abort —
 # a missing anchor means upstream moved and the patch needs re-deriving.
