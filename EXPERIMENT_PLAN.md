@@ -113,6 +113,13 @@ be false. dim=16 is the honest regime.
 
 ## Phase 2 (done — see RESULTS.md)
 
+> **Stale numbers (annotation).** The figures in this paragraph are from the
+> early, confounded run (`top_p=0.95`, per-model inherited sampling params,
+> Llama's decode cleanup on) and were superseded by the controlled
+> re-measurement — including the "Qwen2.5 ≈0%" claim, which was retracted.
+> RESULTS.md and WRITEUP.md carry the correct tables; this paragraph is kept
+> as the pre-registration-era snapshot.
+
 Wild-caught result: open models sampled while retaining token IDs, find
 naturally non-canonical spans (`encode(decode(gen_ids)) != gen_ids`), compare
 the actual vs re-tokenized stream. Outcome: real models generate non-canonically

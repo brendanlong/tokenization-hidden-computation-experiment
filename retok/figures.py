@@ -262,20 +262,21 @@ def plot_scale_ladder(out_path: Path) -> None:
 # Temperature sweep (code+multilingual prompts, 48 gens/cell; the temp-0 cell is
 # 8 deterministic gens, since greedy repeats). See RESULTS.md.
 #
-# NOTE the temp-0 zeros below are subset-limited, not a true zero: re-running
-# greedy over the full 25-prompt set finds 0.08% pooled across four models
-# (RESULTS.md, "Greedy decoding is NOT 0%"). The 8-prompt sweep set contains no
-# arithmetic prompts, which is where GPT-2's greedy hits are. Kept as measured
-# so this curve stays one internally-consistent experiment; the annotation on
-# the plot carries the correction.
+# Values are the published temperature_*.jsonl artifacts (pinned re-run of the
+# sweep, 48 gens/cell, seed 0) so the figure matches what a reader can recompute
+# via `phase2_temperature --from-jsonl`. NOTE the temp-0 cells are an 8-prompt
+# subset (deterministic, so n-samples adds nothing): Llama reads 0% there but
+# Qwen 2/8 (0.34%/tok), and the full 25-prompt greedy run finds 0.08% pooled
+# across four models (RESULTS.md, "Greedy decoding is NOT 0%") — greedy is low,
+# not immune. The annotation on the plot carries this.
 PHASE2_TEMPS = [0.0, 0.7, 1.0, 1.5, 2.0]
 # CONTROLLED (pure sampling). Per-generation here is fine: it's a within-model
 # comparison at FIXED generation length, so the length-saturation problem that
 # rules per-generation out for cross-domain comparison doesn't apply.
 PHASE2_TEMP_RATES = {  # per-TOKEN % (we report per-token everywhere; the
     # per-generation rate saturates with length and isn't comparable)
-    "Llama-3.2-1B": ([0.00, 0.22, 0.95, 3.68, 4.30], "#0072B2"),
-    "Qwen2.5-1.5B": ([0.00, 0.22, 0.42, 3.33, 3.77], "#009E73"),
+    "Llama-3.2-1B": ([0.00, 0.03, 0.94, 3.43, 4.38], "#0072B2"),
+    "Qwen2.5-1.5B": ([0.34, 0.15, 0.55, 2.94, 5.89], "#009E73"),
 }
 
 
@@ -298,20 +299,20 @@ def plot_temperature(out_path: Path) -> None:
     ax.set_xticks(PHASE2_TEMPS)
     ax.set_xlabel("sampling temperature")
     ax.set_ylabel("emitted tokens that are non-canonical (%)")
-    ax.set_ylim(-0.2, 5.0)
+    ax.set_ylim(-0.2, 6.4)
     ax.set_title(
         "Non-canonical generation is largely a tail-sampling effect\n"
-        "~0.1% under greedy decoding; 3-4% of tokens by temperature 1.5",
+        "greedy is low but not immune; ~3% of tokens by temperature 1.5",
         fontsize=10.5,
         loc="left",
     )
-    # The 0.0 points read as an exact zero, which a wider prompt set refutes.
+    # The 0.0 points read as near-zero, which a wider prompt set refutes.
     ax.annotate(
-        "greedy is 0% on these 8 prompts, but\n"
-        "0.08% over the full 25-prompt set\n"
-        "(6/99 gens) — low, not immune",
-        xy=(0.0, 0.0),
-        xytext=(0.28, 1.45),
+        "greedy is not immune: Qwen 2/8 gens\n"
+        "even on these 8 prompts, and 0.08%\n"
+        "pooled over the full 25-prompt set (6/99)",
+        xy=(0.0, 0.34),
+        xytext=(0.28, 1.75),
         fontsize=8.2,
         color=MUTED,
         arrowprops={"arrowstyle": "->", "color": MUTED, "linewidth": 0.9},
@@ -562,10 +563,12 @@ def plot_phase2_rates(out_path: Path) -> None:
     print(f"Wrote {out_path}")
 
 
-# Causal-contamination decay (phase2_decay, Llama-3.2-1B, 49 spans).
+# Causal-contamination decay (phase2_decay, Llama-3.2-1B, 60 spans). Values are
+# the published decay_*.jsonl artifact (pinned re-run) so the figure matches
+# what a reader can recompute via `phase2_decay --from-jsonl`.
 DECAY_D = [0, 1, 2, 4, 8, 16, 32, 64]
-DECAY_MEDKL = [0.227, 0.062, 0.025, 0.016, 0.007, 0.004, 0.003, 0.002]
-DECAY_FLIP = [50, 27, 14, 20, 12, 9, 11, 15]
+DECAY_MEDKL = [0.392, 0.118, 0.043, 0.014, 0.012, 0.005, 0.002, 0.004]
+DECAY_FLIP = [50, 39, 27, 16, 18, 15, 7, 12]
 
 
 def plot_decay(out_path: Path) -> None:
@@ -595,7 +598,7 @@ def plot_decay(out_path: Path) -> None:
     )
     ax1.set_yscale("log")
     ax1.set_ylabel("median next-token KL (nats)")
-    ax1.set_title("Magnitude dilutes ~100x by 16 tokens", fontsize=10, loc="left")
+    ax1.set_title("Magnitude dilutes ~78x by 16 tokens", fontsize=10, loc="left")
 
     ax2.plot(
         DECAY_D,
@@ -609,11 +612,11 @@ def plot_decay(out_path: Path) -> None:
     ax2.set_ylim(0, 56)
     ax2.set_ylabel("top-1 next-token flips (%)")
     ax2.set_title(
-        "...but the flip rate plateaus near 10%, it doesn't vanish",
+        "...but the flip rate plateaus near 10-15%, it doesn't vanish",
         fontsize=10,
         loc="left",
     )
-    ax2.axhspan(9, 15, color=ORANGE, alpha=0.10, zorder=1)
+    ax2.axhspan(7, 18, color=ORANGE, alpha=0.10, zorder=1)
 
     fig.suptitle(
         "A single non-canonical token perturbs every later position",
