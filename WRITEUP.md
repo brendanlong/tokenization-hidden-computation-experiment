@@ -38,7 +38,7 @@ digit-by-digit (3 tokens), sometimes as a single "merged" answer token.
 | how often it *prefers* the one-token form (full-vocab argmax) | **0%** |
 | probability it assigns the correct one-token answer | **0.003** |
 | decode positions: actual → re-tokenized | **3 → 1** (whole transcript 13 → 7) |
-| probability of the answer given the *re-tokenized* transcript | **0.0003** |
+| probability of the answer given the *re-tokenized* transcript | **0.0003–0.0007** (per seed) |
 
 <sub>The two middle rows are conditioned differently, which is worth stating
 because they look inconsistent otherwise. The 1.3% is an argmax *restricted to
@@ -61,18 +61,20 @@ no token-ID logging at all.
 whitespace, so a bad split of one word doesn't change how later words encode —
 the *tokenization* recovers at the next word boundary. But *causal* damage
 outlives it: attention is causal, so every later position attends to a token that
-was never emitted. Walking forward from a non-canonical span in Llama-3.2-1B:
+was never emitted. Walking forward from a non-canonical span in Llama-3.2-1B
+(60 spans; the published `decay_*.jsonl` artifact, recomputable via
+`phase2_decay --from-jsonl`):
 
 | tokens past the span | median next-token KL | top-1 flip |
 |---:|---:|---:|
-| 0 | 0.227 | 50% |
-| 4 | 0.016 | 20% |
-| 16 | 0.004 | 9% |
-| 64 | 0.002 | 15% |
+| 0 | 0.392 | 50% |
+| 4 | 0.014 | 16% |
+| 16 | 0.005 | 15% |
+| 64 | 0.004 | 12% |
 
-Magnitude decays ~57× within 16 tokens (and ~110× by 64), but the flip rate
-plateaus near 10%
-rather than vanishing. Those distant flips are near-ties (median KL 0.002), so
+Magnitude decays ~78× within 16 tokens (and ~98× by 64), but the flip rate
+plateaus near 10–15%
+rather than vanishing. Those distant flips are near-ties (median KL 0.004), so
 the practical reading is: **the span's neighbourhood is genuinely unreliable for
 per-position analysis; further out, only positions where the model was
 near-indifferent are affected.**
@@ -104,7 +106,7 @@ generations reach 5.2%. Those labels are the *prompt's* language, though, and
 the small models answer Russian and Japanese prompts mostly in English
 (Llama-3.2-1B emits 7% CJK characters for CJK prompts; Llama-3.1-8B emits 37%).
 Re-attributing each token to the script it is actually written in, **CJK tokens
-are among the lowest-rate tokens, not the highest** (0.12–1.07%).
+are among the lowest-rate tokens, not the highest** (0.00–1.07%).
 
 What drives the domain effect is the prompt pushing the model off-distribution.
 Holding script fixed at Latin, Llama-3.2-1B is non-canonical on 0.03% of Latin
@@ -116,17 +118,18 @@ domain column as "how far outside its comfort zone the prompt puts the model",
 not as "how hard this script is to tokenize".
 
 **Temperature dominates everything.** **0.08%** of tokens under greedy
-decoding, **0.4–1.0%** at temperature 1.0, and **3–4%** by temperature 1.5 — a
-~4× jump for half a point of temperature. This is largely a tail-sampling
+decoding, **0.5–1.0%** at temperature 1.0, and **~3–3.5%** by temperature 1.5 — a
+4–5× jump for half a point of temperature. This is largely a tail-sampling
 phenomenon: models concentrate mass on the canonical continuation, and most of
 these tokens come out of the tail.
 
 Greedy is **not zero**: at argmax across 99 generations from four models, 6
 contained a non-canonical span — the model's *most likely* continuation is
-sometimes a non-canonical token. (An 8-prompt subset reads 0% at greedy; the
-full 25-prompt set does not, because GPT-2's greedy hits are concentrated in
-arithmetic prompts.) Temperature moves the rate roughly an order of magnitude,
-from 0.08% at greedy to 3–4% at 1.5.
+sometimes a non-canonical token. (An early 8-prompt sweep read 0% at greedy;
+neither the full 25-prompt set nor the published re-run of that sweep does —
+GPT-2's greedy hits are concentrated in arithmetic prompts, and Qwen hits on
+2 of the 8 even there.) Temperature moves the rate ~40×,
+from 0.08% at greedy to ~3% at 1.5.
 
 ![Non-canonical rate vs temperature](figures/phase2_temperature.png)
 
@@ -166,14 +169,15 @@ fake, a zero rate is ambiguous with provider-side re-serialization.
 
 | frontier model | pooled per-token |
 |---|---:|
-| gpt-4o / gpt-4.1 (+ minis) | ≤0.014% |
+| gpt-4o / gpt-4.1 (+ minis) | ≤0.015% |
 | Qwen3-235B-A22B-2507 | 0% observed in 23k tokens |
 | **DeepSeek V3-0324 / V3.1** | **0.39% / 0.38%** |
 
 A **40× spread among current frontier models** — the rate is
 lineage-dependent, not uniformly vanishing. The two DeepSeek generations
 replicate each other, and V3.1 is nonzero even on English (0.17%, vs
-0.00–0.03% for every other modern model here); its spans are mostly
+0.00–0.03% for the OpenAI and Qwen lines; V3-0324's English slice reads 0.14%
+on a thin 5 generations); its spans are mostly
 punctuation–newline boundary splits. Everything in one picture:
 
 ![All 17 models, 2019–2025: falling but lineage-dependent](figures/phase2_overview.png)
@@ -187,7 +191,8 @@ are externally unmeasurable on every serving path we found.**
 
 **Report the length, and report per-token.** The per-*generation* rate — "did
 this sample contain a non-canonical span?" — is a strong function of how long
-you sampled: truncating our generations to 32/64/128/200 tokens moves GPT-2 from
+you sampled: truncating our generations to 32/64/128/200 tokens (counting, at
+each N, the generations that emitted at least N tokens) moves GPT-2 from
 20% to 64% while its per-token rate stays at ~1.6%. That follows from BPE being
 non-recovering: once a sequence goes off-canonical, every extension stays
 off-canonical, so the sequence-level flag only accumulates and saturates at
@@ -232,7 +237,7 @@ complies."
 every API-measurable frontier model (gpt-4o/4.1 lines, DeepSeek-V3.1,
 Qwen3-235B; `phase2_induce_api.py`) gets 97–100% compliance, which removes the
 small models' limiting factor and cleanly isolates the tokenization question:
-**0 induced of 294 compliant productions.** Given the ideal semantic setup,
+**0 induced of 346 compliant productions** (of 348 trials). Given the ideal semantic setup,
 frontier models emit the canonical compound every time. Combined with the rate
 table, the frontier picture is two-axis: DeepSeek emits non-canonical tokens
 *spontaneously* but cannot be *steered* into targeted splits; the OpenAI and
@@ -361,10 +366,13 @@ a HuggingFace dataset:
 Generation needs a GPU; **analysis doesn't**:
 
 ```bash
-huggingface-cli download brendanlong/retok-noncanonical-tokenization \
-    --repo-type dataset --local-dir data/retok/artifacts
-uv run python -m retok.phase2_verify data/retok/artifacts/*.jsonl
+uv run python -m retok.phase2_verify --all-published  # the rate table, from raw IDs
+bash scripts/reproduce_analyses.sh                    # every table in this writeup
 ```
 
 That recomputes canonicality from the raw IDs rather than trusting our stored
-flags, so every rate above is checkable independently of our generation step.
+flags, so the rates above are checkable independently of our generation step.
+One provenance note: the interp/decay/temperature divergence artifacts are
+pinned re-runs (the original sweeps predate artifact publishing), and the decay
+and temperature numbers above quote those published artifacts; the original
+runs' values, where they differ slightly, are preserved in RESULTS.md.

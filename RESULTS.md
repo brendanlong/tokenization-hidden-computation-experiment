@@ -28,6 +28,44 @@
 > the final 80-trial artifacts were generated. WRITEUP.md §3 carries the
 > correct numbers; the headline induction results (38/41, 6/8, the controls,
 > and the pooled Fisher test) recompute exactly.
+>
+> **Further errata (annotation, 2026-08-24, from a full independent
+> re-verification of every quoted number against the published artifacts —
+> log body still verbatim):**
+>
+> - **"0 induced of 294 compliant productions" is wrong; the correct count is
+>   346** (60+60+60+60+48+58 — the sum of the section's own table; 348 trials,
+>   2 Qwen trials returned no logprobs and left no record). No quantity
+>   computable from the `api/induce_*.jsonl` records equals 294. The error
+>   understates n, so the null is unaffected.
+> - **Frontier logprobs table:** Qwen3-235B usable generations are 92 in the
+>   published artifact, not "~89". The V3-0324 english cell (shown "—") is
+>   0.14% per-token in its artifact (2/1,415 tokens, from 1 of only 5 english
+>   generations) — thin, but it means "0.00–0.03% english for every other
+>   modern model" should exclude the DeepSeek lineage, not just V3.1.
+>   gpt-4.1-mini pooled is 0.0143%, so "0.01%" rounds it down.
+> - **The published `temperature_*` / `decay_*` / `interp_*` artifacts are
+>   pinned re-runs** (`scripts/regenerate_divergence_artifacts.sh`; the
+>   original sweeps predate artifact publishing and their invocations were not
+>   fully recorded). Cell values differ from the tables below at the 20–60%
+>   relative level with identical qualitative shape — e.g. decay median KL at
+>   the boundary is 0.392 (60 spans) in the artifact vs 0.227 (49 spans)
+>   below; interp flips are 50% (82/165), confident flips 3% (5/165) vs 51% /
+>   4% below; temperature per-token at 1.0 is 0.55%/0.94% (Qwen/Llama) vs
+>   0.42%/0.95% below. WRITEUP.md and the figures now quote the published
+>   artifacts.
+> - **"Both models are exactly 0% under greedy decoding" is contradicted by
+>   the published temperature artifact**: the pinned re-run has Qwen2.5 at 2/8
+>   generations non-canonical at temperature 0 on that same 8-prompt subset
+>   (0.34% per-token). This strengthens the later "Greedy decoding is NOT 0%"
+>   correction rather than weakening it.
+> - **The `mean_retok_p_correct` behind WRITEUP §1's "probability of the
+>   answer given the re-tokenized transcript" was never logged here**: it is
+>   0.00033 for retok-main-s0 and 0.00056 / 0.00066 for s1 / s2 (from
+>   `retok.analysis` on the published checkpoints). The reconciliation table's
+>   producing script was also not committed; its numbers re-derive from the
+>   published checkpoints to within 0.02pp (restricted argmax 1.29% vs 1.27%
+>   quoted).
 
 
 **Question.** Can a model's actual token stream differ from the canonical

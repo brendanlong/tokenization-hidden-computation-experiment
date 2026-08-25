@@ -44,6 +44,12 @@ def verify(paths: list[Path]) -> int:
         if not records:
             print(f"{path}: EMPTY")
             continue
+        if "generated_ids" not in records[0]:
+            # e.g. induce_*.jsonl (induction trials) swept in by a glob —
+            # different schema, verified by its own tooling.
+            print(f"\n=== {path.name} ===")
+            print("  SKIPPED — no generated_ids field (not a rate-table artifact)")
+            continue
         model = records[0]["model"]
         try:
             tok = AutoTokenizer.from_pretrained(model)

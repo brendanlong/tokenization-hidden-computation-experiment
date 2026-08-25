@@ -42,7 +42,7 @@ adversary required.
    44/49 vs 1/25, Fisher exact p ≈ 1.5×10⁻¹³. It works through *semantics*, not
    form: "one character at a time" and "one digit at a time" both fail
    completely. On six API-measurable frontier models the same probe gets 97–100%
-   compliance and **0 induced of 294** compliant productions.
+   compliance and **0 induced of 346** compliant productions.
 
 ![All 17 models, 2019–2025: falling but lineage-dependent](figures/phase2_overview.png)
 

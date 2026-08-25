@@ -1,6 +1,10 @@
 # retok_rl — will RL spontaneously learn to emit non-canonical tokens?
 
-**Status:** planned. See [EXPERIMENT_PLAN.md](EXPERIMENT_PLAN.md).
+**Status:** run — see [RESULTS.md](RESULTS.md). Headline (single seed,
+gpt2-large): canonical rate fell 100% → 61.5% over 2,000 GRPO steps under a
+reward blind to tokenization, drifting toward reward-dense *greedy-longest*
+chunks — not the single-digit (compute-buying) form, which stayed ≈0.
+See [EXPERIMENT_PLAN.md](EXPERIMENT_PLAN.md) for the pre-registered predictions.
 
 Follow-up to [`retok`](../retok/), which established that re-tokenized
 transcripts can hide computation, that real models emit non-canonical tokens at

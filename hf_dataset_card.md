@@ -67,6 +67,8 @@ repetition_penalty=1.0` — pinned explicitly, not inherited from each repo's
 | `induce_<model>.jsonl` | prompted-induction trials + matched controls |
 | `greedy/<model>.jsonl` | greedy-decoding (temperature 0) runs over the full prompt set |
 | `lw_comparison/<model>.jsonl` | the three "Weird Re-Tokenization" comparison models, our methodology |
+| `api/<model>.jsonl` | frontier models measured via chat-completions logprobs (OpenAI: `generated_ids`; OpenRouter: `sampled_tokens` strings + `provider`) |
+| `api/induce_<model>.jsonl` | the prompted-induction probe + controls on the frontier models |
 | `interp_<model>.jsonl` | boundary-divergence records (per-generation, with KL / next-token IDs at the first non-canonical boundary) |
 | `decay_<model>.jsonl` | contamination-decay records (per-generation, with KL / top-1 flip at each distance past the span) |
 | `temperature_<model>.jsonl` | temperature-sweep records (rate-table schema plus varying `temperature`) |
