@@ -44,6 +44,15 @@ adversary required.
    completely. On six API-measurable frontier models the same probe gets 97–100%
    compliance and **0 induced of 346** compliant productions.
 
+4. **RL drifts off canonical without being asked (single-seed pilot).** GRPO on
+   gpt2-large, rewarding correct digits of the *decoded* text (RLVR-style,
+   blind to tokenization), took canonical from 100% to **61.5%** of rollouts in
+   2,000 steps — a mix of both pre-registered attractors, weighted to
+   memorisation: reward-dense greedy-longest chunks (37.5%) plus a late, small
+   rise in all-single-digit output (0 → 1.6%). gpt2 at identical settings
+   stayed ~99% canonical while failing the task, so the drift is
+   capability-gated. See [`retok_rl/`](retok_rl/).
+
 ![All 17 models, 2019–2025: falling but lineage-dependent](figures/phase2_overview.png)
 
 ## Asks

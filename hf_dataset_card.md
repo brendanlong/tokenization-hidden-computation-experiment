@@ -120,6 +120,11 @@ bookkeeping in both is recomputable on CPU (`--from-jsonl` in the matching
 module); the stored KL/probability values are what a GPU re-run would
 regenerate.
 
+Provenance note: the `interp_*` / `decay_*` / `temperature_*` files are pinned
+re-runs of the original sweeps (which predate artifact publishing); the
+writeup quotes these files, and the original runs' slightly different values
+are preserved in the repo's RESULTS.md errata.
+
 ## Verifying
 
 ```python

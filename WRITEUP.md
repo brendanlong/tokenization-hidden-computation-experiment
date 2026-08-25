@@ -1,6 +1,6 @@
 # The Positions in Your Transcript Are Not the Positions That Ran
 
-*Draft — August 2026. Code: `retok/`. `RESULTS.md` is the
+*Draft — August 2026. Code: `retok/` (`retok_rl/` for §4). `RESULTS.md` is the
 full run log — every command, seed, wandb id and caveat, including the design
 dead-ends and two self-corrections along the way.*
 
@@ -252,6 +252,55 @@ conceptualise its output in pieces. But the accessible lever is coarse
 (word-level concatenation), not a controllable encoder, which argues *against* an
 easy steganographic channel.
 
+## 4. And RL drifts off canonical without being asked (pilot)
+
+§3 asked whether a *prompt* can move a model off canonical segmentation. The
+RL question is sharper: rewarding the **decoded text** is exactly what RLVR
+does, and nothing in that reward constrains *which tokens* produced the text.
+So we trained gpt2-large with GRPO on decimal expansion of `1/b` (30 places,
+reward = number of correct leading digits of the decoded completion, 77 train
+/ 21 held-out divisors, no SFT, no tokenization term anywhere; `retok_rl/`).
+
+Two non-canonical attractors were named in advance: **all-single-digit** — one
+digit per decode step, the extra-compute form our toy exploits, and the
+easiest per-step prediction — and **greedy-longest** — reward-dense memorised
+chunks, where one correct prediction covers 2–16 digits. Staying canonical is
+a needle: greedy-longest differs from canonical for 93 of 98 divisors, so the
+null requires landing on precisely BPE's merge-order segmentation.
+
+| GRPO step | canonical | greedy-longest | all-single-digit |
+|---:|---:|---:|---:|
+| 50 | 100.0% | 0.0% | 0.0% |
+| 400 | 99.0% | 0.5% | 0.0% |
+| 800 | 95.2% | 3.4% | 0.0% |
+| 1200 | 79.3% | 19.2% | 0.0% |
+| 1600 | 69.2% | 27.9% | 0.3% |
+| 2000 | **61.5%** | **37.5%** | **1.6%** |
+
+**Canonical fell 100% → 61.5% of rollouts in 2,000 steps under a reward blind
+to tokenization, and was still falling at the step cap.** The drift is a mix
+of both predicted attractors, weighted heavily toward memorisation: mostly
+greedy-longest chunks, with the single-digit form appearing late and small
+(0 → 1.6%). It is also capability-gated: gpt2 (124M) at identical settings
+stayed ~99% canonical while failing the task — the drift appeared only once
+the model could actually earn the reward.
+
+Caveats, recorded in `retok_rl/RESULTS.md`: single seed; reward reached 2.99
+of 30, so the task is far from mastered; held-out reward stayed flat (~2.2) —
+this is 77 memorised expansions, not division; the no-entropy-bonus run
+collapsed and is invalid (the result needs `entropy_coef=0.05` to keep
+exploration alive); and per-rollout artifacts were not retained, so unlike
+§1–3 this table comes from training logs rather than published records. Treat
+it as a pilot.
+
+The reading that survives those caveats: the standard RLVR reward exerts no
+pressure to stay canonical, and a capable-enough policy drifts off it within a
+few thousand steps — at which point a monitor reading the re-tokenized
+transcript is reading segmentations that never ran for over a third of
+rollouts. What it does *not* show is the toy's mechanism arising
+spontaneously: the compute-relevant single-digit form barely registers, and
+the drift goes where the reward density is.
+
 ## What we're claiming, and what was already known
 
 That non-canonical tokenization changes model behavior is **not ours**.
@@ -283,13 +332,14 @@ What we add on top of that literature: the **interpretability-validity framing**
 (positions-in-transcript ≠ positions-that-ran, rather than an attack or a billing
 anomaly), a **controlled toy** where the hidden computation is real and measured,
 the **calibration detector**, the **temperature and scale dependence** across
-seven models, the **downstream-divergence** measurement, and the
-**prompted-induction** result with controls. The last two are the ones we'd
+seven models, the **downstream-divergence** measurement, the
+**prompted-induction** result with controls, and the **RL-drift pilot** (§4).
+The induction and RL results are the ones we'd
 flag: that agenda names *writer invariance* — "does the model assign significant
 probability to non-canonical token sequences?" — as a **new, unexplored
 question**, and lists "can the model steer itself... while evading CoT monitors?"
 as the one item its own preliminary experiments have *not* touched. §3 above is a
-direct empirical answer to the first, and a partial one to the second.
+direct empirical answer to the first; §3 and §4 are partial ones to the second.
 
 ## Limitations
 
