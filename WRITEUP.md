@@ -119,7 +119,7 @@ not as "how hard this script is to tokenize".
 
 **Temperature dominates everything.** **0.08%** of tokens under greedy
 decoding, **0.5–1.0%** at temperature 1.0, and **~3–3.5%** by temperature 1.5 — a
-4–5× jump for half a point of temperature. This is largely a tail-sampling
+3.5–5× jump for half a point of temperature. This is largely a tail-sampling
 phenomenon: models concentrate mass on the canonical continuation, and most of
 these tokens come out of the tail.
 
@@ -173,11 +173,12 @@ fake, a zero rate is ambiguous with provider-side re-serialization.
 | Qwen3-235B-A22B-2507 | 0% observed in 23k tokens |
 | **DeepSeek V3-0324 / V3.1** | **0.39% / 0.38%** |
 
-A **40× spread among current frontier models** — the rate is
+A **~27× spread among current frontier models** (0.39% against the worst
+OpenAI line at 0.014%) — the rate is
 lineage-dependent, not uniformly vanishing. The two DeepSeek generations
-replicate each other, and V3.1 is nonzero even on English (0.17%, vs
-0.00–0.03% for the OpenAI and Qwen lines; V3-0324's English slice reads 0.14%
-on a thin 5 generations); its spans are mostly
+replicate each other, and V3.1 is nonzero even on English (0.17%, vs exactly
+0.00% English for the OpenAI and Qwen lines; V3-0324's English slice reads
+0.14% on a thin 5 generations); its spans are mostly
 punctuation–newline boundary splits. Everything in one picture:
 
 ![All 17 models, 2019–2025: falling but lineage-dependent](figures/phase2_overview.png)

@@ -25,7 +25,7 @@ adversary required.
    actually needed three for. Even absent any hidden computation, the round trip
    perturbs interpretability: next-token distributions at a non-canonical span
    boundary diverge (median KL 0.39, top-1 flips 50%), decaying ~78× within 16
-   tokens (and ~100× by 64) but with the flip rate plateauing near 10%.
+   tokens (and ~98× by 64) but with the flip rate plateauing near 10–15%.
 
 2. **In-the-wild rates are low, fall with scale within families — and are
    lineage-dependent at the frontier.** Across seven models and

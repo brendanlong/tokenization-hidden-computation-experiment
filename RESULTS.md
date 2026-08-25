@@ -35,25 +35,29 @@
 >
 > - **"0 induced of 294 compliant productions" is wrong; the correct count is
 >   346** (60+60+60+60+48+58 — the sum of the section's own table; 348 trials,
->   2 Qwen trials returned no logprobs and left no record). No quantity
->   computable from the `api/induce_*.jsonl` records equals 294. The error
+>   2 Qwen trials returned no logprobs and left no record). No natural
+>   aggregate of the `api/induce_*.jsonl` records reproduces 294. The error
 >   understates n, so the null is unaffected.
 > - **Frontier logprobs table:** Qwen3-235B usable generations are 92 in the
 >   published artifact, not "~89". The V3-0324 english cell (shown "—") is
 >   0.14% per-token in its artifact (2/1,415 tokens, from 1 of only 5 english
 >   generations) — thin, but it means "0.00–0.03% english for every other
 >   modern model" should exclude the DeepSeek lineage, not just V3.1.
->   gpt-4.1-mini pooled is 0.0143%, so "0.01%" rounds it down.
+>   gpt-4.1-mini pooled is 0.0143%, so "0.01%" rounds it down — and the "40×
+>   lineage spread" below leans on that rounding; against the unrounded worst
+>   OpenAI cell it is ~27× (0.39 / 0.0143).
 > - **The published `temperature_*` / `decay_*` / `interp_*` artifacts are
 >   pinned re-runs** (`scripts/regenerate_divergence_artifacts.sh`; the
 >   original sweeps predate artifact publishing and their invocations were not
->   fully recorded). Cell values differ from the tables below at the 20–60%
->   relative level with identical qualitative shape — e.g. decay median KL at
->   the boundary is 0.392 (60 spans) in the artifact vs 0.227 (49 spans)
->   below; interp flips are 50% (82/165), confident flips 3% (5/165) vs 51% /
->   4% below; temperature per-token at 1.0 is 0.55%/0.94% (Qwen/Llama) vs
->   0.42%/0.95% below. WRITEUP.md and the figures now quote the published
->   artifacts.
+>   fully recorded; the temperature re-run is also 48 gens/cell vs the
+>   original 64). Cell values differ from the tables below by up to ~2× on
+>   most cells, and ~7× on one — with identical qualitative shape. E.g. decay
+>   median KL at the boundary is 0.392 (60 spans) in the artifact vs 0.227
+>   (49 spans) below; interp flips are 50% (82/165), confident flips 3%
+>   (5/165) vs 51% / 4% below; temperature per-token at 1.0 is 0.55%/0.94%
+>   (Qwen/Llama) vs 0.42%/0.95% below, and the Llama 0.7 cell is 0.03% vs
+>   0.22% below (the ~7× case, 1/48 gens). WRITEUP.md and the figures now
+>   quote the published artifacts.
 > - **"Both models are exactly 0% under greedy decoding" is contradicted by
 >   the published temperature artifact**: the pinned re-run has Qwen2.5 at 2/8
 >   generations non-canonical at temperature 0 on that same 8-prompt subset

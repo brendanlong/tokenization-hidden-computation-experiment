@@ -45,10 +45,16 @@ def verify(paths: list[Path]) -> int:
             print(f"{path}: EMPTY")
             continue
         if "generated_ids" not in records[0]:
-            # e.g. induce_*.jsonl (induction trials) swept in by a glob —
-            # different schema, verified by its own tooling.
             print(f"\n=== {path.name} ===")
-            print("  SKIPPED — no generated_ids field (not a rate-table artifact)")
+            if "sampled_tokens" in records[0]:
+                # OpenRouter logprobs runs store token *strings*, not IDs;
+                # their rates are replayed by `retok.phase2_overview`.
+                print("  SKIPPED — OpenRouter schema (sampled_tokens strings);")
+                print("  verify via `uv run python -m retok.phase2_overview`")
+            else:
+                # e.g. induce_*.jsonl (induction trials) swept in by a glob —
+                # different schema, verified by its own tooling.
+                print("  SKIPPED — no generated_ids field (not a rate-table artifact)")
             continue
         model = records[0]["model"]
         try:
