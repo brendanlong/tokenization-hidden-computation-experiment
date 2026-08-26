@@ -39,9 +39,12 @@ setup: |
   # this RunPod fleet runs driver 570 / CUDA 12.8, so cuda_available=False and
   # the GPU preflight aborts the job (it did, 2026-08-26). Swap in the newest
   # cu128 build — pyproject allows torch>=2.0.
+  # --index-strategy unsafe-best-match: uv's default first-match strategy
+  # resolves torch from PyPI (where +cu128 builds don't exist) and errors.
   cd ~/sky_workdir && uv pip install \
     --index-url https://download.pytorch.org/whl/cu128 \
     --extra-index-url https://pypi.org/simple \
+    --index-strategy unsafe-best-match \
     "torch==2.11.0+cu128"
 
 run: |
