@@ -80,3 +80,75 @@ code (`PIPESTATUS`) or crashed runs report SUCCEEDED — this caught two later
 failures. A missing `WANDB_API_KEY` no longer kills a run (falls back to
 `--no-wandb`). Pass `token=` explicitly to `from_pretrained`; images may ship a
 stored HF token that shadows the env var.
+
+## Run 5 — Arm C: word reversal, Qwen2.5-3B-Instruct (`retok-rl-reversal-s0`) — NULL for the compute attractor, with a reward hack
+
+```
+sky launch skypilot/train-retok-rl.yaml -c retok-rl-rev --infra runpod --gpus A40:1 \
+  --down --yes --retry-until-up --secret WANDB_API_KEY --env TASK=reversal \
+  --env RUN_NAME=retok-rl-reversal-s0 --env STEPS=2000 --env MODEL=Qwen/Qwen2.5-3B-Instruct
+```
+
+A40, 1h00m training (~$0.45; plus ~$0.15 across three failed launches — see
+infra notes). Pre-registered in EXPERIMENT_PLAN.md Arm C *before* launch.
+Per-rollout artifacts retained this time: 16,564 records (token IDs, targets,
+attractor, correctness per eval) in `rollouts.jsonl`; step-0 baseline eval
+runs before any training. wandb: `retok-rl-reversal-s0`, project `retok_rl`.
+
+| step | reward | exact | attempted | single-char toks | canonical | greedy-longest | other | held reward |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 0 | 0.92 | 6.0% | 95.2% | 20.0% | 85.7% | 1.2% | 9.5% | 1.08 |
+| 550 | 1.61 | 1.2% | 85.7% | 10.9% | 79.2% | 4.2% | — | 1.40 |
+| 1150 | 1.86 | 1.8% | 91.7% | 11.8% | 81.5% | 0.6% | — | 1.67 |
+| 2000 | **1.94** | **0.6%** | 89.3% | **10.4%** | **73.2%** | 3.6% | **22.6%** | **1.61** |
+
+**Prediction 1 (primary) is REFUTED.** Reward doubled (0.92 → 1.94 leading
+chars; held-out 1.08 → 1.61, so not a capability null) while the fraction of
+single-character tokens *fell* from 20% to ~10% — the compute attractor did
+not emerge, on the task built to favour it, with the channel measurably open
+(canonical segmentations of reversed words are 81% multi-char tokens in this
+tokenizer). All-single-char rollouts stayed ≤2% throughout. Greedy-longest
+stayed at baseline noise (0.6–6.5%).
+
+**The canonical decline (85.7% → 73.2%) is a reward hack, not segmentation
+drift.** Nothing in the reward penalises trailing garbage, and the policy
+learned to emit a correct 2–3 character prefix followed by junk: len-ratio
+rose 0.92 → 1.45, exact-match collapsed (len-3 words: 25% → 4%) even as
+leading-correct rose, and the grown "other" bucket at step 2000 is
+prefix-plus-junk (`car → ['rac','HttpPost']`, `nut → [' tut','ген','Pizza']`),
+not a coherent alternative segmentation of the target.
+
+**Prediction 2 (held-out more single-char than train at matched reward): no
+support.** Late-training single-char fractions are 11.4% (train) vs 12.5%
+(held-out) — flat.
+
+**Reading.** On a modern instruct model with a modern tokenizer, 2,000 GRPO
+steps of tokenization-blind reward on the compute-aligned task produced *no*
+movement into either non-canonical attractor; if anything the policy
+concentrated further onto canonical forms — the same mass-concentration that
+makes better-trained models more canonical in the wild-rate measurements. The
+contrast with Run 4 (gpt2-large drifting to greedy-longest chunks) says drift
+is task- and lineage-dependent, not a general RLVR property. Design lesson
+for any follow-up arm: leading-correct reward without an exactness/termination
+term invites the prefix+junk hack; use exact-match bonus or penalise trailing
+text.
+
+Caveats: single seed; reward far from mastery (1.94 of mean target length
+~5.5); 2,000 steps; the reward hack contaminates the canonical-attractor
+metric (the clean metric is single-char token fraction over the letter run,
+which is flat-to-declining).
+
+### Infra notes (attempts 1–3, all pre-training failures, ~$0.15 total)
+
+1. uv.lock resolves torch 2.13 (cu130 wheel); RunPod fleet is driver 570 /
+   CUDA 12.8 → `cuda_available=False`, GPU preflight aborted. Fix: swap in
+   torch 2.11.0+cu128 after `uv sync`.
+2. uv's default first-match index strategy resolved torch from PyPI (no
+   +cu128 builds) → `--index-strategy unsafe-best-match`.
+3. Plain `uv run` re-synced the venv to the lockfile at job start, reverting
+   the swap into a mixed cu128/cu13 env that died on import
+   (`libtorch_cuda.so: undefined symbol: ncclCommResume`). Fix: `uv run
+   --no-sync` everywhere + purge the lock's cu13 CUDA stack before the swap.
+   The rollouts also now travel gzip+base64 in the log stream as an
+   artifact escape hatch (an unresolvable ssh alias ate the Run-4-era
+   fetch path twice).
