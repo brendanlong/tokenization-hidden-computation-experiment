@@ -63,9 +63,15 @@ run: |
   # Smoke first: a few steps proves the reward wiring and the metrics callback
   # before we pay for the real run.
   if [ "${SMOKE:-0}" = "1" ]; then
-    uv run python -m retok_rl.train --model "${MODEL}" \
-      --steps 6 --eval-every 3 --eval-samples 2 --batch-size 4 \
-      --num-generations 4 --places 12 --no-wandb 2>&1 | tee "${OUT}/smoke.txt"
+    if [ "${TASK}" = "reversal" ]; then
+      uv run python -m retok_rl.train_reversal --model "${MODEL}" --bf16 \
+        --steps 6 --eval-every 3 --eval-samples 2 --batch-size 4 \
+        --num-generations 4 --output-dir "${OUT}" --no-wandb 2>&1 | tee "${OUT}/smoke.txt"
+    else
+      uv run python -m retok_rl.train --model "${MODEL}" \
+        --steps 6 --eval-every 3 --eval-samples 2 --batch-size 4 \
+        --num-generations 4 --places 12 --no-wandb 2>&1 | tee "${OUT}/smoke.txt"
+    fi
     rc=${PIPESTATUS[0]}
     echo ">>> smoke exited ${rc}"
     exit "${rc}"
@@ -86,15 +92,28 @@ run: |
   # token can download the gated repo. huggingface_hub reads HF_TOKEN straight
   # from the environment, which is how the other tasks here authenticate.
 
-  uv run python -m retok_rl.train ${WANDB_FLAG} \
-      --model "${MODEL}" --steps "${STEPS}" --beta "${BETA}" --places "${PLACES}" \
-      --entropy-coef "${ENTROPY_COEF}" ${ADAPTIVE_ENTROPY:+--use-adaptive-entropy} \
-      --wandb-run-name "${RUN_NAME}" 2>&1 | tee "${OUT}/train.txt"
+  if [ "${TASK}" = "reversal" ]; then
+    # Arm C: word reversal. bf16 (3B does not fit an A40 in fp32 training),
+    # rollout artifacts written to ${OUT}/rollouts.jsonl — rsync them off
+    # before the cluster autodowns.
+    uv run python -m retok_rl.train_reversal ${WANDB_FLAG} \
+        --model "${MODEL}" --steps "${STEPS}" --beta "${BETA}" --bf16 \
+        --entropy-coef "${ENTROPY_COEF}" --seed "${SEED}" \
+        --output-dir "${OUT}" \
+        --wandb-run-name "${RUN_NAME}" 2>&1 | tee "${OUT}/train.txt"
+  else
+    uv run python -m retok_rl.train ${WANDB_FLAG} \
+        --model "${MODEL}" --steps "${STEPS}" --beta "${BETA}" --places "${PLACES}" \
+        --entropy-coef "${ENTROPY_COEF}" ${ADAPTIVE_ENTROPY:+--use-adaptive-entropy} \
+        --wandb-run-name "${RUN_NAME}" 2>&1 | tee "${OUT}/train.txt"
+  fi
   rc=${PIPESTATUS[0]}
   echo ">>> training exited ${rc}"
   exit "${rc}"
 
 envs:
+  TASK: "expansion"             # "reversal" = Arm C (retok_rl.train_reversal)
+  SEED: "0"
   STEPS: "3000"
   BETA: "0.0"                   # arm A. Arm B: >0, asks whether KL suppresses the drift
   # Arm A collapsed with entropy_coef=0: entropy fell 4.65 -> 0.004 nats and every
