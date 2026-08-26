@@ -35,6 +35,14 @@ setup: |
   # pyproject allows >=3.12, so uv is free to pick 3.14 unless told otherwise.
   uv python install 3.12
   uv sync --python 3.12 --directory ~/sky_workdir
+  # The lock resolves torch 2.13 (a cu130 wheel), which needs a >=580 driver;
+  # this RunPod fleet runs driver 570 / CUDA 12.8, so cuda_available=False and
+  # the GPU preflight aborts the job (it did, 2026-08-26). Swap in the newest
+  # cu128 build — pyproject allows torch>=2.0.
+  cd ~/sky_workdir && uv pip install \
+    --index-url https://download.pytorch.org/whl/cu128 \
+    --extra-index-url https://pypi.org/simple \
+    "torch==2.11.0+cu128"
 
 run: |
   cd ~/sky_workdir
@@ -101,15 +109,26 @@ run: |
         --entropy-coef "${ENTROPY_COEF}" --seed "${SEED}" \
         --output-dir "${OUT}" \
         --wandb-run-name "${RUN_NAME}" 2>&1 | tee "${OUT}/train.txt"
+    rc=${PIPESTATUS[0]}
+    # Belt-and-suspenders artifact escape hatch: the rollouts also travel in
+    # the log stream as gzip+base64, so a dead pod or an unresolvable ssh
+    # alias (both have happened) cannot lose them.
+    if [ -f "${OUT}/rollouts.jsonl" ]; then
+      echo ">>> ROLLOUTS_B64_BEGIN"
+      gzip -c "${OUT}/rollouts.jsonl" | base64 -w 4000
+      echo ">>> ROLLOUTS_B64_END"
+    fi
+    echo ">>> training exited ${rc}"
+    exit "${rc}"
   else
     uv run python -m retok_rl.train ${WANDB_FLAG} \
         --model "${MODEL}" --steps "${STEPS}" --beta "${BETA}" --places "${PLACES}" \
         --entropy-coef "${ENTROPY_COEF}" ${ADAPTIVE_ENTROPY:+--use-adaptive-entropy} \
         --wandb-run-name "${RUN_NAME}" 2>&1 | tee "${OUT}/train.txt"
+    rc=${PIPESTATUS[0]}
+    echo ">>> training exited ${rc}"
+    exit "${rc}"
   fi
-  rc=${PIPESTATUS[0]}
-  echo ">>> training exited ${rc}"
-  exit "${rc}"
 
 envs:
   TASK: "expansion"             # "reversal" = Arm C (retok_rl.train_reversal)
