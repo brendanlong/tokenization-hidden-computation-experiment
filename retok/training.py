@@ -192,6 +192,7 @@ def evaluate(
     *,
     eval_batch_size: int,
     autocast_ctx: object,
+    merged_operands: bool = False,
 ) -> dict[str, float]:
     """Per-format, per-carry-chain-length accuracy on held-out buckets.
 
@@ -214,7 +215,9 @@ def evaluate(
             count = 0
             for i in range(0, len(pairs), eval_batch_size):
                 chunk = pairs[i : i + eval_batch_size]
-                batch = encode_eval_batch(tok, chunk, fmt)
+                batch = encode_eval_batch(
+                    tok, chunk, fmt, merged_operands=merged_operands
+                )
                 correct, p_answer = _score_format_batch(
                     model, batch, tok, fmt, device, autocast_ctx
                 )
@@ -274,6 +277,7 @@ def train_retok_model(
     use_wandb: bool,
     wandb_project: str,
     wandb_config: dict[str, object],
+    merged_operands: bool = False,
 ) -> TrainingResult:
     print(
         f"Model params: {model.count_parameters():,} "
@@ -335,6 +339,7 @@ def train_retok_model(
                 device,
                 eval_batch_size=eval_batch_size,
                 autocast_ctx=autocast_ctx,
+                merged_operands=merged_operands,
             )
         )
         model.train()

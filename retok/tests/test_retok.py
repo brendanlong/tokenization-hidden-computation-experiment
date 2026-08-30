@@ -318,3 +318,25 @@ def test_autojunk_disabled_matters() -> None:
 
     assert changed(autojunk=False) == 2  # exactly the two substituted tokens
     assert changed(autojunk=True) > 2  # junk heuristic over-attributes
+
+
+def test_merged_operands_direct_equals_canonicalized_cot() -> None:
+    """With merged operands, the direct encoding IS the canonical replay.
+
+    This is the point of the flag: canonicalize() of the full CoT stream
+    (operands included) must coincide token-for-token with the direct-format
+    training encoding, making the fully re-tokenized transcript an
+    in-distribution example rather than a sequence the model never read.
+    """
+    tok = RetokTokenizer(n_digits=3, base=10)
+    for a, b in ((57, 68), (0, 0), (123, 456), (999, 0)):
+        cot = encode_example(tok, a, b, FMT_COT)
+        cot_ids = [t for t in cot.input_ids if t != tok.pad_id]
+        direct = encode_example(tok, a, b, FMT_DIRECT, merged_operands=True)
+        direct_ids = [t for t in direct.input_ids if t != tok.pad_id]
+        assert tok.canonicalize(cot_ids) == direct_ids
+        # CoT encoding itself is unchanged by the flag
+        assert (
+            encode_example(tok, a, b, FMT_COT, merged_operands=True).input_ids
+            == cot.input_ids
+        )

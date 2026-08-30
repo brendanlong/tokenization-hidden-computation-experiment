@@ -136,3 +136,34 @@ Complexity-theoretic (model-independent) one-pass impossibility (needs an
 NC¹-hard task like S5, which has worse training + collapse-vocab problems);
 binary / large-D variants (the retrieval wall or over-parallelizability made
 them worse than base-10 D=3).
+
+## Merged-operands variant (pre-registered 2026-08-30, before any training)
+
+A rerun of the headline model with two changes: `direct_fraction=0.5` (was
+0.3) and `--merged-operands` — DIRECT-format training examples encode
+operands as merged tokens (`<bos> [750] + [860] = [521]`), so the fully
+re-tokenized CoT transcript is now token-for-token an in-distribution
+training format (pinned by `test_merged_operands_direct_equals_canonicalized_cot`)
+instead of a sequence the model has never read. CoT examples are unchanged.
+`generate_n=30M` (was 20M) so the digit branch keeps ~15M examples at the
+smaller mixture share (the width sweep showed dim-16 CoT undertrained below
+~10M). 3 seeds, everything else identical to `retok-main-s*`.
+
+**Purpose.** Closes the §1 limitation that the re-tokenized replay is
+off-distribution: with this model, "can't read this input" is eliminated as
+an explanation, isolating "can't compute it in one step" and the
+positional-structure probe result.
+
+**Predictions.**
+1. CoT (digit-by-digit) accuracy stays ≳99% at 30M examples.
+2. Direct/merged accuracy stays far below CoT. It may rise above the
+   original 1.3% (readable merged operands, larger direct share, trained
+   operand embeddings) — the claim requires only direct ≪ CoT, and the
+   width sweep predicts one-step-with-merged-retrieval fails at dim 16.
+   *Refuted if* direct accuracy approaches CoT.
+3. Sampled format mix ≈ 50/50, tracking the training mixture.
+4. The carry probe on the fully re-tokenized replay — now in-distribution —
+   still reads near chance for the deep (2-step) carry at the answer
+   position. This is the load-bearing prediction: if the probe now recovers
+   the carry, the §1 "false negative for interpretability" claim was partly
+   an artifact of distribution shift, and we will say so.

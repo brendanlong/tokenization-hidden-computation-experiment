@@ -140,7 +140,9 @@ class Encoded:
     arithmetic: Arithmetic
 
 
-def encode_example(tok: RetokTokenizer, a: int, b: int, fmt: int) -> Encoded:
+def encode_example(
+    tok: RetokTokenizer, a: int, b: int, fmt: int, *, merged_operands: bool = False
+) -> Encoded:
     """Encode ``a + b`` in CoT or direct format, padded to ``seq_len``.
 
     Operands are given as **individual digit tokens** (LSB-first, like the
@@ -148,6 +150,13 @@ def encode_example(tok: RetokTokenizer, a: int, b: int, fmt: int) -> Encoded:
     operand token would hide them and make digit-wise computation impossible.
     The merged vocabulary is used only for the *answer* (direct format), which
     is the span a re-tokenized transcript collapses.
+
+    With ``merged_operands=True``, DIRECT-format examples encode the operands
+    as merged tokens too (``<bos> [a] + [b] = [s] <eos>``), so the direct
+    encoding coincides token-for-token with ``canonicalize()`` of the full
+    CoT stream — the fully re-tokenized transcript becomes an in-distribution
+    training format instead of a sequence the model has never read. CoT
+    examples are unchanged (digit operands, digit answer).
 
     **Caveat this creates:** a 3-digit operand run is itself mergeable, so the
     prompt is not canonical under :meth:`RetokTokenizer.canonicalize` — the full
@@ -168,13 +177,22 @@ def encode_example(tok: RetokTokenizer, a: int, b: int, fmt: int) -> Encoded:
     """
     n_digits = tok.n_digits
     arith = compute_arithmetic(a, b, n_digits, tok.base)
-    prompt = [
-        tok.bos_id,
-        *(tok.digit_token(d) for d in tok.rev_digits(a)),
-        tok.plus_id,
-        *(tok.digit_token(d) for d in tok.rev_digits(b)),
-        tok.eq_id,
-    ]
+    if merged_operands and fmt == FMT_DIRECT:
+        prompt = [
+            tok.bos_id,
+            tok.merged_token(a),
+            tok.plus_id,
+            tok.merged_token(b),
+            tok.eq_id,
+        ]
+    else:
+        prompt = [
+            tok.bos_id,
+            *(tok.digit_token(d) for d in tok.rev_digits(a)),
+            tok.plus_id,
+            *(tok.digit_token(d) for d in tok.rev_digits(b)),
+            tok.eq_id,
+        ]
     answer_positions: list[int] = []
     if fmt == FMT_COT:
         answer = [tok.digit_token(d) for d in tok.rev_digits(arith.s)]
@@ -258,6 +276,7 @@ class ReversedAdditionDataset(SyntheticStream[dict[str, Tensor]]):
         mode: str = "cot",
         seed: int = 42,
         tokenizer: RetokTokenizer | None = None,
+        merged_operands: bool = False,
     ) -> None:
         super().__init__(n_examples=n_examples, seed=seed)
         self.tok = tokenizer or RetokTokenizer(n_digits, base)
@@ -265,13 +284,16 @@ class ReversedAdditionDataset(SyntheticStream[dict[str, Tensor]]):
         self.base = self.tok.base
         self.direct_fraction = direct_fraction
         self.mode = mode
+        self.merged_operands = merged_operands
 
     def generate(self, rng: random.Random) -> dict[str, Tensor]:
         a, b = sample_addition(rng, self.n_digits, self.base)
         if self.mode == "one_step":
             return encode_one_step(self.tok, a, b)
         fmt = FMT_DIRECT if rng.random() < self.direct_fraction else FMT_COT
-        return _to_batch_item(encode_example(self.tok, a, b, fmt))
+        return _to_batch_item(
+            encode_example(self.tok, a, b, fmt, merged_operands=self.merged_operands)
+        )
 
 
 def collate(batch: list[dict[str, Tensor]]) -> dict[str, Tensor]:
@@ -370,14 +392,21 @@ def encode_canonical_replay(
 
 
 def encode_eval_batch(
-    tok: RetokTokenizer, pairs: list[tuple[int, int]], fmt: int
+    tok: RetokTokenizer,
+    pairs: list[tuple[int, int]],
+    fmt: int,
+    *,
+    merged_operands: bool = False,
 ) -> dict[str, Tensor]:
     """Encode a list of ``(a, b)`` pairs in one format into a stacked batch.
 
     Also returns per-example answer targets so scoring needs no re-derivation:
     ``answer_token_positions`` (B, n_answer) and ``answer_targets`` (B, n_answer).
     """
-    encoded = [encode_example(tok, a, b, fmt) for a, b in pairs]
+    encoded = [
+        encode_example(tok, a, b, fmt, merged_operands=merged_operands)
+        for a, b in pairs
+    ]
     n_answer = len(encoded[0].answer_token_positions)
     positions = torch.tensor(
         [e.answer_token_positions for e in encoded], dtype=torch.long

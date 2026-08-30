@@ -119,6 +119,10 @@ class RetokTrainingConfig(BaseTrainingConfig):
     # distribution at "=" genuinely splits between the two — which is what makes
     # a re-tokenized CoT transcript a bona fide sample from the model.
     direct_fraction: float = 0.3
+    # Direct-format examples encode operands as merged tokens too, making the
+    # fully re-tokenized CoT transcript an in-distribution format. CoT
+    # examples are unchanged. See encode_example(merged_operands=...).
+    merged_operands: bool = False
 
     # --- Streaming data (always single-epoch unique data) ---
     generate_n: int = 20_000_000

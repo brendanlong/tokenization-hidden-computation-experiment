@@ -48,6 +48,12 @@ def main() -> None:
         ),
     )
     parser.add_argument("--direct-fraction", type=float, default=0.3)
+    parser.add_argument(
+        "--merged-operands",
+        action="store_true",
+        help="encode DIRECT-format operands as merged tokens (the fully "
+        "re-tokenized transcript becomes in-distribution)",
+    )
     parser.add_argument("--generate-n", type=int, default=20_000_000)
     # Model
     parser.add_argument("--dim", type=int, default=16)
@@ -85,6 +91,7 @@ def main() -> None:
         mode=args.mode,
         include_merged=not args.no_merged,
         direct_fraction=args.direct_fraction,
+        merged_operands=args.merged_operands,
         generate_n=args.generate_n,
         dim=args.dim,
         n_heads=args.n_heads,
@@ -144,6 +151,7 @@ def main() -> None:
         mode=config.mode,
         seed=config.seed + 100,
         tokenizer=tok,
+        merged_operands=config.merged_operands,
     )
     train_loader = DataLoader(
         dataset,
@@ -187,6 +195,7 @@ def main() -> None:
             "model": model_config.model_dump(),
             "training": config.model_dump(),
         },
+        merged_operands=config.merged_operands,
     )
 
     print("\n=== Final Evaluation ===")
