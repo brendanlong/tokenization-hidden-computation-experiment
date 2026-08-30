@@ -513,6 +513,15 @@ def summarise_reversal(
       case-insensitively): which segmentation of the correct answer was
       used. Wrong text contributes zero here; its only effect is on the
       correctness metrics and reward.
+
+    The primary segmentation metrics are the ``correct_region/*`` family:
+    per-token, computed only over tokens that lie entirely within the
+    correct leading prefix of the answer (the characters that match the
+    target). Wrong characters and everything after them are excluded by
+    construction, so junk cannot move these numbers in either direction.
+    ``pos_single_char/{i}`` gives the per-position view: among rollouts
+    whose i-th answer character is correct, how often is that character
+    carried by a length-1 token.
     """
     special = set(tok.all_special_ids)
     attractors: Counter[str] = Counter()
@@ -521,6 +530,9 @@ def summarise_reversal(
     exact = attempted = empty = 0
     gen_nc = tok_bad = tok_total = excluded = 0
     ans_nc = ans_n = 0
+    cr_single = cr_total = cr_nc = cr_n = 0
+    pos_single: Counter[int] = Counter()
+    pos_n: Counter[int] = Counter()
     for ids, target in rollouts:
         core = [t for t in ids if t not in special]
         kept, surface = tokens_covering_letters(tok, core)
@@ -562,6 +574,32 @@ def summarise_reversal(
             piece = piece.strip() if i == 0 else piece
             total_toks += 1
             single_toks += len(piece) == 1
+        # correct-region metrics: tokens lying entirely within the correct
+        # leading prefix (characters matching the target, case-insensitive)
+        n_correct = leading_correct(produced, target)
+        if n_correct and kept:
+            cr_ids: list[int] = []
+            cr_surface = ""
+            consumed = 0
+            for i, t in enumerate(kept):
+                piece = tok.decode([t])
+                stripped = piece.lstrip() if i == 0 else piece
+                if consumed + len(stripped) > n_correct:
+                    break  # token straddles the correct/incorrect boundary
+                # per-position: character j (1-indexed) carried by this token
+                for j in range(consumed + 1, consumed + len(stripped) + 1):
+                    pos_n[j] += 1
+                    pos_single[j] += len(stripped) == 1
+                cr_ids.append(t)
+                cr_surface += stripped
+                cr_total += 1
+                cr_single += len(stripped) == 1
+                consumed += len(stripped)
+            if cr_ids and "�" not in cr_surface:
+                cr_n += 1
+                canon_cr = tok.encode(cr_surface, add_special_tokens=False)
+                canon_cr_sp = tok.encode(" " + cr_surface, add_special_tokens=False)
+                cr_nc += cr_ids != canon_cr and cr_ids != canon_cr_sp
     n = max(1, len(rollouts))
     n_meas = max(1, len(rollouts) - excluded)
     n_comp = max(1, sum(attractors.values()))
@@ -578,7 +616,13 @@ def summarise_reversal(
         "roundtrip/answer_non_canonical": ans_nc / max(1, ans_n),
         "roundtrip/excluded": excluded / n,
         "n_compliant": float(sum(attractors.values())),
+        "correct_region/frac_single_char": cr_single / max(1, cr_total),
+        "correct_region/non_canonical": cr_nc / max(1, cr_n),
+        "correct_region/mean_tokens": cr_total / max(1, cr_n),
     }
     for name in ("all-single-char", "canonical", "greedy-longest", "other"):
         out[f"attractor_compliant/{name}"] = attractors[name] / n_comp
+    for j in range(1, 5):
+        out[f"pos_single_char/{j}"] = pos_single[j] / max(1, pos_n[j])
+        out[f"pos_n/{j}"] = float(pos_n[j])
     return out

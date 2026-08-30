@@ -16,9 +16,12 @@ CLAUDE.md; this file carries only what is specific to working here).
   uninterpretable without its length. Report both, per-token first.
 - Segmentation-of-the-answer classifications (canonical / greedy-longest /
   all-single-char) are only defined for compliant outputs, compared against
-  the **case-preserved** produced surface. See
-  `retok_rl/reversal.py::summarise_reversal` for the reference
-  implementation of both metric families.
+  the **case-preserved** produced surface. The primary form is the
+  **correct-region** family: per-token metrics computed only over tokens
+  lying entirely within the correct leading prefix of the answer (wrong
+  characters excluded by construction), optionally broken out per character
+  position. See `retok_rl/reversal.py::summarise_reversal` for the
+  reference implementation of all metric families.
 - Exclude U+FFFD round trips; NFC-normalize concerns apply for Qwen; pin
   sampling params and dtype (see WRITEUP.md "If you measure this yourself").
 

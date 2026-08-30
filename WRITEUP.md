@@ -326,16 +326,22 @@ number below recomputes from them. What changed, step 0 → 2000:
 | **non-canonical emission, per token** (`encode(decode(ids)) != ids`) | 6.7% | 4.8% |
 | non-canonical answer runs | 6.7% | 6.0% |
 | non-canonical, per generation | 7.7% | 37.3% |
+| **single-char tokens, correct region only** | 43.4% | 0.0% |
+| round-trip non-canonical, correct region | 2.4% | 0.0% |
 
 The per-generation row rises for the reason §2 documents: completions grew
 from ~2.5 tokens to the cap (the reward stops counting at the first mismatch,
 so trailing text after the scored prefix is neither rewarded nor penalised,
 and the policy produces plenty of it), and a sequence-level flag accumulates
-with length. Per-token and answer-region canonicality are flat. Among
-compliant rollouts — exact matches, the only place "which segmentation of
-the answer" is defined — the mix is 91% canonical early and 100% late, with
-all-single-char at 0% throughout; exact matches collapsed to ~1%, so late n
-is small (41 pooled over steps 1500–2000). Two pre-registered notes: the
+with length. Per-token and answer-region canonicality are flat. The
+correct-region rows are the primary segmentation metrics — per token, over
+only the tokens lying entirely within the correct leading prefix, so wrong
+characters can't move them: the correct region was canonically tokenized at
+every eval, and its single-char share fell 43% → 0% (by the end the correct
+prefix is carried by exactly one multi-char token; per position, character 1
+went 50% → 0% single-char-carried). Among fully compliant rollouts the
+attractor mix is 91% canonical early, 100% late, all-single-char 0%
+throughout; exact matches collapsed to ~1%, so late n is small. Two pre-registered notes: the
 reward scores only the leading correct prefix, so selection pressure
 concentrated on the first ~2 characters; and the final reward sits inside
 the ~1–2 character band the plan marked in advance as "weak evidence either

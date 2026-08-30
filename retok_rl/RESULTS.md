@@ -145,6 +145,8 @@ Artifacts: 16,564 per-rollout records (token IDs, targets, per-eval) in
 | **round-trip non-canonical, answer run only** | 6.7% | 8.3% | 8.3% | 4.2% | **6.0%** |
 | round-trip non-canonical, per generation | 7.7% | 26.7% | 46.8% | 36.6% | 37.3% |
 | excluded (U+FFFD, unmeasurable) | 0.0% | 1.8% | 17.3% | 20.2% | 10.7% |
+| **single-char tokens, correct region only** | 43.4% | 55.3% | 11.1% | 1.9% | **0.0%** |
+| **round-trip non-canonical, correct region** | 2.4% | 0.0% | 0.0% | 1.9% | **0.0%** |
 
 Held-out tracks train on every metric (e.g. per-token round trip 4.2% →
 4.7%). Notes on reading the table:
@@ -161,6 +163,16 @@ Held-out tracks train on every metric (e.g. per-token round trip 4.2% →
   pooled over steps 1500–2000 (n=41); all-single-char 0% at every eval.
   Exact matches collapsed (6.0% → 0.6%; length-3 words 25% → 4%), so late n
   is small.
+- The **correct-region rows** (added 2026-08-30; `correct_region/*` in
+  `reversal.py`) are the primary segmentation metrics: computed per token,
+  only over tokens lying entirely within the correct leading prefix of the
+  answer, so wrong characters and junk are excluded by construction. The
+  correct region is canonically tokenized at every eval (0–2.4%
+  non-canonical) and its single-char share fell 43% → 0% — by the end the
+  correct prefix (~2 chars) is carried by exactly one multi-char token
+  (mean 1.26 → 1.00 tokens). Per-position: position 1 went 50% → 0%
+  single-char-carried (n=42 → 63); positions 2–3 were multi-char-carried
+  throughout; position 4+ was almost never reached.
 - The step-0 per-token rate (6.7% train / 4.2% held-out) is far above
   Qwen2.5's Phase-2 english rate (0.00%); reversed-word text is
   off-distribution, the regime Phase 2 measured as high-rate.
