@@ -50,10 +50,11 @@ adversary required.
    100% to **61.5%** of rollouts in 2,000 steps — mostly reward-dense
    greedy-longest chunks (37.5%), with all-single-digit rising late to 1.6%.
    But the same pressure on a modern model (Qwen2.5-3B, word reversal — the
-   task where per-character emission genuinely pays) **refuted the
-   pre-registered compute-attractor prediction**: reward doubled while
-   single-character token usage *fell* 20% → 10%, and the only drift was a
-   reward hack (correct prefix + junk). See [`retok_rl/`](retok_rl/).
+   task where per-character emission genuinely pays) **did not support the
+   pre-registered compute-attractor prediction**: reward roughly doubled
+   while single-character token usage *fell* 20% → 10% (a transient rise to
+   9.5% of rollouts decayed as a correct-prefix-plus-junk reward hack took
+   over). A null with pre-registered caveats. See [`retok_rl/`](retok_rl/).
 
 ![All 17 models, 2019–2025: falling but lineage-dependent](figures/phase2_overview.png)
 

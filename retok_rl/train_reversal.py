@@ -65,7 +65,16 @@ def make_reward() -> Callable[..., list[float]]:
 
     Absolute count, not a fraction — same anti-hack rationale as the
     expansion arm: a normalised reward makes "one correct letter and stop"
-    score 1.0.
+    score 1.0. (Run 5 lesson: absolute count is still hackable from the
+    other side — with nothing penalising trailing garbage, the policy
+    converged on a correct 2-3 char prefix plus junk. A follow-up arm
+    should add an exactness/termination term.)
+
+    Definitional note: this uses ``letter_prefix`` on the full decoded
+    completion, while the eval callback's letter run comes from per-token
+    decoding (``tokens_covering_letters``), which truncates at U+FFFD when
+    a multi-byte character spans tokens. The two disagree on ~2% of
+    rollouts; measured mean leading-correct is identical to 4 decimals.
     """
 
     def reward(completions: list[str], target: list[str], **_: object) -> list[float]:
@@ -95,6 +104,8 @@ class ReversalEval(TrainerCallback):
         n_samples: int,
         use_wandb: bool,
         jsonl_path: Path,
+        run_name: str,
+        seed: int,
         n_eval_prompts: int = 36,
     ) -> None:
         self.model, self.tok = model, tok
@@ -102,6 +113,10 @@ class ReversalEval(TrainerCallback):
         self.every, self.n = every, n_samples
         self.use_wandb = use_wandb
         self.jsonl_path = jsonl_path
+        # Stamped into every record: the file is opened in append mode, so
+        # without run identity a smoke run and a real run on the same output
+        # dir would silently concatenate and collide at step 0.
+        self.run_name, self.seed = run_name, seed
         self.n_eval_prompts = n_eval_prompts
 
     @torch.no_grad()
@@ -132,6 +147,8 @@ class ReversalEval(TrainerCallback):
                 by_len[len(ex.word)].append((kept, ex.target))
                 records.append(
                     {
+                        "run": self.run_name,
+                        "seed": self.seed,
                         "step": step,
                         "split": split,
                         "word": ex.word,
@@ -163,10 +180,7 @@ class ReversalEval(TrainerCallback):
             metrics[f"len{length}/frac_single_char"] = s["frac_single_char_tokens"]
         held, _ = self._rollouts(self.held_ex, "heldout", step)
         metrics.update(
-            {
-                f"heldout/{k}": v
-                for k, v in summarise_reversal(self.tok, held).items()
-            }
+            {f"heldout/{k}": v for k, v in summarise_reversal(self.tok, held).items()}
         )
         log_metrics(metrics, step=step, enabled=self.use_wandb)
         print(
@@ -290,6 +304,8 @@ def main() -> None:
                 a.eval_samples,
                 not a.no_wandb,
                 jsonl_path,
+                run_name,
+                a.seed,
             ),
             CollapseGuard(patience=a.collapse_patience),
         ],

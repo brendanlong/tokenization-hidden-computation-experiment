@@ -98,35 +98,54 @@ runs before any training. wandb: `retok-rl-reversal-s0`, project `retok_rl`.
 | step | reward | exact | attempted | single-char toks | canonical | greedy-longest | other | held reward |
 |---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | 0 | 0.92 | 6.0% | 95.2% | 20.0% | 85.7% | 1.2% | 9.5% | 1.08 |
-| 550 | 1.61 | 1.2% | 85.7% | 10.9% | 79.2% | 4.2% | — | 1.40 |
-| 1150 | 1.86 | 1.8% | 91.7% | 11.8% | 81.5% | 0.6% | — | 1.67 |
+| 550 | 1.61 | 1.2% | 85.7% | 10.9% | 79.2% | 4.2% | 15.5% | 1.40 |
+| 1150 | 1.86 | 1.8% | 91.7% | 11.8% | 81.5% | 0.6% | 17.9% | 1.67 |
 | 2000 | **1.94** | **0.6%** | 89.3% | **10.4%** | **73.2%** | 3.6% | **22.6%** | **1.61** |
 
-**Prediction 1 (primary) is REFUTED.** Reward doubled (0.92 → 1.94 leading
-chars; held-out 1.08 → 1.61, so not a capability null) while the fraction of
-single-character tokens *fell* from 20% to ~10% — the compute attractor did
-not emerge, on the task built to favour it, with the channel measurably open
-(canonical segmentations of reversed words are 81% multi-char tokens in this
-tokenizer). All-single-char rollouts stayed ≤2% throughout. Greedy-longest
-stayed at baseline noise (0.6–6.5%).
+**Prediction 1 (primary) is not supported.** Reward roughly doubled
+(0.92 → 1.94 leading chars; held-out 1.08 → 1.61) while the fraction of
+single-character tokens *fell* from 20% to ~10% (19.9% → 7.0% restricted to
+the tokens actually covering the target region) — on the task built to favour
+the compute attractor, with the channel measurably open (canonical
+segmentations of reversed words are 81% multi-char tokens in this tokenizer).
+The all-single-char attractor rose only transiently: 1.8% at step 0 to a peak
+of **9.5%** of train rollouts at step 150 (held-out 9.3%), decaying below
+baseline as the prefix hack took over. Greedy-longest stayed in baseline
+noise (0.0–6.5%).
 
-**The canonical decline (85.7% → 73.2%) is a reward hack, not segmentation
-drift.** Nothing in the reward penalises trailing garbage, and the policy
-learned to emit a correct 2–3 character prefix followed by junk: len-ratio
-rose 0.92 → 1.45, exact-match collapsed (len-3 words: 25% → 4%) even as
-leading-correct rose, and the grown "other" bucket at step 2000 is
-prefix-plus-junk (`car → ['rac','HttpPost']`, `nut → [' tut','ген','Pizza']`),
-not a coherent alternative segmentation of the target.
+**The canonical decline (85.7% → 73.2%) is non-compliance, not segmentation
+drift.** Nothing in the reward penalises trailing garbage or casing. The
+policy learned to emit a correct 2–3 character prefix followed by junk
+(len-ratio rose 0.92 → 1.45; exact-match collapsed even as leading-correct
+rose, len-3 words 25% → 4%; the grown "other" bucket is prefix-plus-junk:
+`car → ['rac','HttpPost']`, `nut → [' tut','ген','Pizza']`), and uppercase
+output rose from 0.7% to 18.3% of letter runs — which the classifier counts
+as "other" by construction, since it compares segmentations case-sensitively
+against the lowercase target. Canonical falls about as much among
+length-matched rollouts (91.5% → 72.7%), so the decline tracks these
+compliance-surface changes, not a re-segmentation of correctly produced
+strings.
+
+**Prediction 3 (capability gate) is partly triggered — stated up front, so
+stating it now.** The plan designated reward staying at ~1–2 chars as "a
+capability null... weak evidence either way". Final reward (1.94 train /
+1.61 held-out, against mean target length 5.55) sits at the top of that
+band, and the reward hack means the serial-reversal mechanism was under
+selection pressure only for the first ~2 characters (full correct reversals,
+even allowing trailing junk, fell 9.5% → 2.4%). This arm is therefore a
+null with caveats, not a clean refutation: the defensible claim is "under
+this reward, on the most favourable task we could build, the compute
+attractor did not emerge in 2,000 steps".
 
 **Prediction 2 (held-out more single-char than train at matched reward): no
 support.** Late-training single-char fractions are 11.4% (train) vs 12.5%
 (held-out) — flat.
 
 **Reading.** On a modern instruct model with a modern tokenizer, 2,000 GRPO
-steps of tokenization-blind reward on the compute-aligned task produced *no*
-movement into either non-canonical attractor; if anything the policy
-concentrated further onto canonical forms — the same mass-concentration that
-makes better-trained models more canonical in the wild-rate measurements. The
+steps of tokenization-blind reward on the compute-aligned task produced no
+sustained movement into either non-canonical attractor — the policy moved
+toward chunkier tokens and non-compliant surface forms (junk suffixes,
+uppercase), not toward alternative segmentations of the target. The
 contrast with Run 4 (gpt2-large drifting to greedy-longest chunks) says drift
 is task- and lineage-dependent, not a general RLVR property. Design lesson
 for any follow-up arm: leading-correct reward without an exactness/termination
@@ -135,8 +154,11 @@ text.
 
 Caveats: single seed; reward far from mastery (1.94 of mean target length
 ~5.5); 2,000 steps; the reward hack contaminates the canonical-attractor
-metric (the clean metric is single-char token fraction over the letter run,
-which is flat-to-declining).
+metric, and the single-char token fraction is itself diluted by junk
+(non-ASCII letters appear in 10.1% → 39.4% of letter runs over training,
+and each multi-char junk token inflates the denominator) — restricted to
+tokens covering the target region it falls 19.9% → 7.0%, same direction,
+stronger.
 
 ### Infra notes (attempts 1–3, all pre-training failures, ~$0.15 total)
 
@@ -151,4 +173,7 @@ which is flat-to-declining).
    --no-sync` everywhere + purge the lock's cu13 CUDA stack before the swap.
    The rollouts also now travel gzip+base64 in the log stream as an
    artifact escape hatch (an unresolvable ssh alias ate the Run-4-era
-   fetch path twice).
+   fetch path twice). Extracting the blob from a `sky logs` capture
+   requires stripping ANSI colour codes *before* removing the
+   `(cluster, pid=N)` prefixes — `scripts/extract_rollouts_from_log.sh`
+   does both and round-trips byte-identically.

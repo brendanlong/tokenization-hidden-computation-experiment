@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 from retok_rl.reversal import (
     WORDS_BY_LEN,
@@ -18,7 +18,7 @@ from retok_rl.reversal import (
 
 
 @pytest.fixture(scope="module")
-def tok() -> object:
+def tok() -> PreTrainedTokenizerBase:
     # gpt2 is ungated and byte-level BPE like Qwen's; the metric code is
     # tokenizer-generic.
     return AutoTokenizer.from_pretrained("gpt2")
@@ -43,7 +43,9 @@ def test_word_split_is_disjoint_and_stratified() -> None:
     assert {len(w) for w in held} == set(WORDS_BY_LEN)
 
 
-def test_prompt_contains_word_and_target_is_reversed(tok: object) -> None:
+def test_prompt_contains_word_and_target_is_reversed(
+    tok: PreTrainedTokenizerBase,
+) -> None:
     for ex in build_reversal(("cat", "keyboard"), tok):
         assert ex.word in ex.prompt
         assert ex.target == ex.word[::-1]
@@ -64,14 +66,16 @@ def test_letter_overlap() -> None:
     assert letter_overlap("ta", "tac") == pytest.approx(2 / 3)
 
 
-def test_tokens_covering_letters_stops_at_non_letter(tok: object) -> None:
+def test_tokens_covering_letters_stops_at_non_letter(
+    tok: PreTrainedTokenizerBase,
+) -> None:
     ids = tok.encode(" tac, and more", add_special_tokens=False)
     kept, surface = tokens_covering_letters(tok, ids)
     assert surface == "tac"
     assert tok.decode(kept).strip() == "tac"
 
 
-def test_classify_letters_attractors(tok: object) -> None:
+def test_classify_letters_attractors(tok: PreTrainedTokenizerBase) -> None:
     word = "esuohthgil"  # 'lighthouse' reversed
     single = [tok.encode(c, add_special_tokens=False) for c in word]
     single_ids = [t for enc in single for t in enc]
@@ -91,8 +95,8 @@ def test_classify_letters_attractors(tok: object) -> None:
     assert classify_letters(tok, canon_ids, "different") == "other"
 
 
-def test_summarise_reversal_correctness_metrics(tok: object) -> None:
-    word, target = "cat", "tac"
+def test_summarise_reversal_correctness_metrics(tok: PreTrainedTokenizerBase) -> None:
+    target = "tac"
     right = tok.encode("tac", add_special_tokens=False)
     wrong = tok.encode("dog", add_special_tokens=False)
     stats = summarise_reversal(tok, [(right, target), (wrong, target), ([], target)])

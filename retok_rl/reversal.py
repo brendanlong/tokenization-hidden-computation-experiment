@@ -30,59 +30,329 @@ if TYPE_CHECKING:
 # Common English words, lengths 3-8. Length is the difficulty knob (the
 # analogue of the expansion arm's divisor class): the measured Qwen2.5-3B
 # baseline near-masters length 3 and degrades monotonically to length 8.
-WORDS_BY_LEN: dict[int, tuple[str, ...]] = {
-    3: (
-        "cat dog sun map box red car pen cup hat bed sky ice arm leg egg "
-        "jam key fox owl bee ant cow pig rat bag bat can cap dot ear eye "
-        "fan fig gem hen hut ink jar kit lip log man mud net nut oak pan"
-    ).split(),
-    4: (
-        "fish star book lamp tree milk door wind rain snow fire gold ship "
-        "bird cake corn desk drum farm frog game hand iron king lake leaf "
-        "lion moon nest pond rock roof room root rose sand seed song soup "
-        "wall wave wolf wood wool yard bell belt bone"
-    ).split(),
-    5: (
-        "house plant river cloud bread stone apple beach brain chair dance "
-        "eagle earth field fruit glass grape green heart horse juice knife "
-        "lemon light money mouse music night ocean paint paper peach piano "
-        "pilot queen radio shark sheep shelf smile snake spoon sugar table "
-        "tiger train water wheel"
-    ).split(),
-    6: (
-        "garden planet bottle memory silver window animal basket bridge "
-        "butter camera candle carpet castle cheese circle coffee cotton "
-        "dinner doctor dragon flower forest guitar hammer island jacket "
-        "jungle kitten ladder lizard marble market mirror monkey mother "
-        "museum orange pencil pepper pillow pocket rabbit rocket school "
-        "season sister spider spring stream street summer temple ticket "
-        "tunnel turtle valley violin winter yellow"
-    ).split(),
-    7: (
-        "kitchen library machine morning picture rainbow bicycle blanket "
-        "brother cabinet ceiling channel chicken chimney country crystal "
-        "curtain diamond dolphin drawing evening factory feather fiction "
-        "giraffe grammar harvest history holiday journey lantern leather "
-        "lettuce mineral monster octopus orchard package pattern penguin "
-        "pyramid rooster soldier station teacher theater thunder traffic "
-        "village vitamin weather whisper"
-    ).split(),
-    8: (
-        "keyboard notebook mountain sandwich elephant computer aircraft "
-        "airplane alphabet birthday building calendar campfire champion "
-        "daughter dinosaur distance engineer envelope festival football "
-        "fountain hospital lavender magazine medicine mushroom painting "
-        "paradise passport pavement platform princess question rainfall "
-        "sailboat scissors shoulder sidewalk skeleton squirrel stairway "
-        "sunshine thursday tomorrow treasure umbrella universe vacation "
-        "wildfire"
-    ).split(),
+WORDS_BY_LEN: dict[int, list[str]] = {
+    3: [
+        "cat",
+        "dog",
+        "sun",
+        "map",
+        "box",
+        "red",
+        "car",
+        "pen",
+        "cup",
+        "hat",
+        "bed",
+        "sky",
+        "ice",
+        "arm",
+        "leg",
+        "egg",
+        "jam",
+        "key",
+        "fox",
+        "owl",
+        "bee",
+        "ant",
+        "cow",
+        "pig",
+        "rat",
+        "bag",
+        "bat",
+        "can",
+        "cap",
+        "dot",
+        "ear",
+        "eye",
+        "fan",
+        "fig",
+        "gem",
+        "hen",
+        "hut",
+        "ink",
+        "jar",
+        "kit",
+        "lip",
+        "log",
+        "man",
+        "mud",
+        "net",
+        "nut",
+        "oak",
+        "pan",
+    ],
+    4: [
+        "fish",
+        "star",
+        "book",
+        "lamp",
+        "tree",
+        "milk",
+        "door",
+        "wind",
+        "rain",
+        "snow",
+        "fire",
+        "gold",
+        "ship",
+        "bird",
+        "cake",
+        "corn",
+        "desk",
+        "drum",
+        "farm",
+        "frog",
+        "game",
+        "hand",
+        "iron",
+        "king",
+        "lake",
+        "leaf",
+        "lion",
+        "moon",
+        "nest",
+        "pond",
+        "rock",
+        "roof",
+        "room",
+        "root",
+        "rose",
+        "sand",
+        "seed",
+        "song",
+        "soup",
+        "wall",
+        "wave",
+        "wolf",
+        "wood",
+        "wool",
+        "yard",
+        "bell",
+        "belt",
+        "bone",
+    ],
+    5: [
+        "house",
+        "plant",
+        "river",
+        "cloud",
+        "bread",
+        "stone",
+        "apple",
+        "beach",
+        "brain",
+        "chair",
+        "dance",
+        "eagle",
+        "earth",
+        "field",
+        "fruit",
+        "glass",
+        "grape",
+        "green",
+        "heart",
+        "horse",
+        "juice",
+        "knife",
+        "lemon",
+        "light",
+        "money",
+        "mouse",
+        "music",
+        "night",
+        "ocean",
+        "paint",
+        "paper",
+        "peach",
+        "piano",
+        "pilot",
+        "queen",
+        "radio",
+        "shark",
+        "sheep",
+        "shelf",
+        "smile",
+        "snake",
+        "spoon",
+        "sugar",
+        "table",
+        "tiger",
+        "train",
+        "water",
+        "wheel",
+    ],
+    6: [
+        "garden",
+        "planet",
+        "bottle",
+        "memory",
+        "silver",
+        "window",
+        "animal",
+        "basket",
+        "bridge",
+        "butter",
+        "camera",
+        "candle",
+        "carpet",
+        "castle",
+        "cheese",
+        "circle",
+        "coffee",
+        "cotton",
+        "dinner",
+        "doctor",
+        "dragon",
+        "flower",
+        "forest",
+        "guitar",
+        "hammer",
+        "island",
+        "jacket",
+        "jungle",
+        "kitten",
+        "ladder",
+        "lizard",
+        "marble",
+        "market",
+        "mirror",
+        "monkey",
+        "mother",
+        "museum",
+        "orange",
+        "pencil",
+        "pepper",
+        "pillow",
+        "pocket",
+        "rabbit",
+        "rocket",
+        "school",
+        "season",
+        "sister",
+        "spider",
+        "spring",
+        "stream",
+        "street",
+        "summer",
+        "temple",
+        "ticket",
+        "tunnel",
+        "turtle",
+        "valley",
+        "violin",
+        "winter",
+        "yellow",
+    ],
+    7: [
+        "kitchen",
+        "library",
+        "machine",
+        "morning",
+        "picture",
+        "rainbow",
+        "bicycle",
+        "blanket",
+        "brother",
+        "cabinet",
+        "ceiling",
+        "channel",
+        "chicken",
+        "chimney",
+        "country",
+        "crystal",
+        "curtain",
+        "diamond",
+        "dolphin",
+        "drawing",
+        "evening",
+        "factory",
+        "feather",
+        "fiction",
+        "giraffe",
+        "grammar",
+        "harvest",
+        "history",
+        "holiday",
+        "journey",
+        "lantern",
+        "leather",
+        "lettuce",
+        "mineral",
+        "monster",
+        "octopus",
+        "orchard",
+        "package",
+        "pattern",
+        "penguin",
+        "pyramid",
+        "rooster",
+        "soldier",
+        "station",
+        "teacher",
+        "theater",
+        "thunder",
+        "traffic",
+        "village",
+        "vitamin",
+        "weather",
+        "whisper",
+    ],
+    8: [
+        "keyboard",
+        "notebook",
+        "mountain",
+        "sandwich",
+        "elephant",
+        "computer",
+        "aircraft",
+        "airplane",
+        "alphabet",
+        "birthday",
+        "building",
+        "calendar",
+        "campfire",
+        "champion",
+        "daughter",
+        "dinosaur",
+        "distance",
+        "engineer",
+        "envelope",
+        "festival",
+        "football",
+        "fountain",
+        "hospital",
+        "lavender",
+        "magazine",
+        "medicine",
+        "mushroom",
+        "painting",
+        "paradise",
+        "passport",
+        "pavement",
+        "platform",
+        "princess",
+        "question",
+        "rainfall",
+        "sailboat",
+        "scissors",
+        "shoulder",
+        "sidewalk",
+        "skeleton",
+        "squirrel",
+        "stairway",
+        "sunshine",
+        "thursday",
+        "tomorrow",
+        "treasure",
+        "umbrella",
+        "universe",
+        "vacation",
+        "wildfire",
+    ],
 }
 
 
-def split_words(
-    n_held_out: int, seed: int
-) -> tuple[tuple[str, ...], tuple[str, ...]]:
+def split_words(n_held_out: int, seed: int) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """Deterministic train/held-out word split, stratified by length.
 
     Stratified for the same reason as the divisor split: an all-length-8
@@ -135,8 +405,10 @@ def build_reversal(
     for w in words:
         if getattr(tok, "chat_template", None):
             msgs = [{"role": "user", "content": PROMPT_TEMPLATE.format(word=w)}]
-            prompt = tok.apply_chat_template(
-                msgs, tokenize=False, add_generation_prompt=True
+            prompt = str(
+                tok.apply_chat_template(
+                    msgs, tokenize=False, add_generation_prompt=True
+                )
             )
         else:
             # Base models (gpt2 smoke tests): plain prompt, and no trailing
@@ -177,16 +449,22 @@ def tokens_covering_letters(
 def classify_letters(
     tok: PreTrainedTokenizerBase, token_ids: list[int], letters: str
 ) -> str:
-    """Which attractor does this token sequence match, over the letter run?"""
+    """Which attractor does this token sequence match, over the letter run?
+
+    Case-sensitive by construction: an uppercase production is classified
+    "other" even if its segmentation mirrors the lowercase canonical one,
+    because the task demands lowercase and a differently-cased string is a
+    different token sequence. Consequence (Run 5): the canonical-attractor
+    fraction conflates casing compliance with segmentation — read it
+    alongside ``frac_single_char_tokens``, which is casing-insensitive.
+    """
     emitted = [tok.decode([t]) for t in token_ids]
     if "".join(emitted).strip().lower() != letters:
         return "other"
     stripped = [e.strip() if i == 0 else e for i, e in enumerate(emitted)]
     if all(len(e) == 1 for e in stripped):
         return "all-single-char"
-    canon = [
-        tok.decode([t]) for t in tok.encode(letters, add_special_tokens=False)
-    ]
+    canon = [tok.decode([t]) for t in tok.encode(letters, add_special_tokens=False)]
     if stripped == canon:
         return "canonical"
     if stripped == greedy_longest(tok, letters):
