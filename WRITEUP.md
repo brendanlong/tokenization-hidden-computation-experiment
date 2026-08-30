@@ -414,12 +414,20 @@ direct empirical answer to the first; §3 and §4 are partial ones to the second
 
 - The toy's magnitude is **constructed by design** — we chose the vocabulary and
   the width. It demonstrates the mechanism, not a deployment rate.
-- The re-tokenized replay is **off-distribution** for the model: merged tokens
-  only ever follow `=` in training, so it has never read one as an operand. We
-  take that to be the point rather than a confound — a re-tokenized transcript
-  *is* a sequence the model never emitted — but it means the collapse in
-  probability and probe accuracy mixes "can't compute it in one step" with
-  "can't read this input". The digit-operand control separates the two.
+- The re-tokenized replay is **off-distribution** for the headline model:
+  merged tokens only ever follow `=` in its training, so it has never read
+  one as an operand — meaning the collapse in probability and probe accuracy
+  mixes "can't compute it in one step" with "can't read this input".
+  **Resolved by a pre-registered control (2026-08-30):** a variant trained
+  with merged operands in the direct format — making the fully re-tokenized
+  transcript an in-distribution training format, token-for-token — still
+  shows the probe collapse (carry recovery 55–62% on the replay vs a 50.9%
+  base, against 80–100% on the real CoT stream, both converged seeds; see
+  RESULTS.md "Merged-operands variant"). The collapse is positional, not
+  distributional. One knock-on documented there: merged operands make the
+  answer format *cued by the prompt encoding*, so that variant no longer
+  models an uncued mixture — the two variants carry complementary halves of
+  the claim.
 - The toy's **whole sequence** re-tokenizes, operands included. What decides
   this is not prompt-vs-completion but *which spans the model wrote*: a CoT
   scratchpad routinely restates its inputs before working on them, so asked

@@ -188,7 +188,10 @@ def main() -> None:
         eval_every_steps=config.eval_every_steps,
         seed=config.seed,
         run_name=run_name,
-        checkpoint_dir=Path(config.checkpoint_dir),
+        # Per-run subdirectory, matching the published hf:checkpoints/<run>/
+        # layout. (The flat layout let three seeds overwrite one final.pt,
+        # 2026-08-30.)
+        checkpoint_dir=Path(config.checkpoint_dir) / run_name,
         use_wandb=config.use_wandb,
         wandb_project=config.wandb_project,
         wandb_config={

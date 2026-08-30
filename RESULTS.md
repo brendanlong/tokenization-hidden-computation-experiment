@@ -1323,3 +1323,49 @@ RUN_NAME=retok-sweep-2L ./train.sh local retok -- --n-layers 2 --generate-n 8000
 - Result: CoT mean __%; direct mean __%; per chain_len {0:__, 1:__, 2:__, 3:__};
   direct P(correct) per chain_len {…}
 -->
+
+## Merged-operands variant (2026-08-30 — pre-registered in EXPERIMENT_PLAN.md before training)
+
+Three seeds on the local RTX 3060, `direct_fraction=0.5`, `--merged-operands`
+(DIRECT-format operands encoded as merged tokens, making the fully
+re-tokenized CoT transcript an in-distribution training format), 30M
+examples; wandb `retok-mergedops-s{0,1,2}`, checkpoints under
+`data/retok/checkpoints/retok-mergedops-s*/` (first attempt overwrote a
+shared `final.pt` — s0/s1 retrained; `train.py` now saves under a per-run
+subdirectory matching the published layout).
+
+| | s0 | s1 | s2 |
+|---|---:|---:|---:|
+| CoT accuracy (training eval) | 100% | 100% | 71.8% |
+| direct accuracy (merged-operand eval) | 2.45% | 0.83% | 1.33% |
+| sampled mix, digit-operand prompt (digit / merged) | 100% / 0% | 100% / 0% | 99.8% / 0.2% |
+| carry into digit 1: CoT / digit-replay / **re-tok replay** | 80.4 / 98.2 / **55.4%** | 82.6 / 98.5 / **55.2%** | (undertrained) |
+| carry into digit 2: CoT / digit-replay / **re-tok replay** | 94.0 / 90.0 / **62.3%** | 89.9 / 67.2 / **58.8%** | — |
+| P(correct merged answer given re-tokenized prompt) | 0.0064 | 0.0039 | — |
+
+(Probe base rate 50.9%. `retok.analysis`'s "direct" accuracy and
+"digit-operand replay" rows use digit-operand encoding, which for THIS
+model is the off-distribution variant — the roles are reversed relative to
+the headline model; the in-distribution direct number is the training
+eval's.)
+
+**Prediction status** (see the plan section for the full statements):
+
+1. *CoT ≳99% at 30M*: holds for s0/s1 (100%); **violated by s2** (71.8%,
+   degrading with carry-chain length — the undertraining signature; at the
+   50/50 split the digit branch gets 15M examples, evidently near the
+   convergence boundary for some seeds).
+2. *Direct ≪ CoT*: holds — 0.8–2.5% with readable merged operands.
+3. *Sampled mix ≈ 50/50*: **refuted, for a structural reason we failed to
+   anticipate.** Merged operands make the format cued: the prompt encoding
+   (digit vs merged operands) reveals the answer format, so on
+   digit-operand prompts the model answers digit-by-digit ~100% of the
+   time. The 50/50 mixture exists across prompt encodings, not within one.
+   The original 70/30 model remains the *uncued-mixture* demonstration;
+   this variant cannot be one.
+4. *Probe stays near chance on the in-distribution replay* — **holds**, and
+   this was the load-bearing prediction: with "can't read this input"
+   eliminated (the replay is now a trained format), carry recovery at the
+   replay positions is 55–62% vs the 50.9% base on both converged seeds,
+   against 80–100% on the real CoT stream. The §1 probe collapse is a
+   positional-structure result, not a distribution-shift artifact.
