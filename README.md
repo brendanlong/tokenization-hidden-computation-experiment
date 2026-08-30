@@ -18,11 +18,11 @@ adversary required.
 ## Findings
 
 1. **Non-canonical tokenization can hide computation.** A 2-layer, width-16
-   transformer trained on 3-digit reversed addition emits its answer
-   digit-by-digit **71%** of the time when sampled (98–99% accurate there) and
-   as a single merged token **29%** of the time (**<1%** accurate) — and
-   re-tokenizing a digit-by-digit transcript produces exactly that
-   merged token. The stored transcript shows it doing in one decode step what it
+   transformer trained on two encodings of 3-digit reversed addition — all
+   digit tokens, and the all-merged canonical encoding — can only do the
+   arithmetic digit-by-digit: **100%** accuracy there vs **≤2%** for every
+   format touching merged tokens, including the all-merged encoding that is
+   half its training data and that re-tokenizing its transcript produces. The stored transcript shows it doing in one decode step what it
    actually needed three for. Even absent any hidden computation, the round trip
    perturbs interpretability: next-token distributions at a non-canonical span
    boundary diverge (median KL 0.39, top-1 flips 50%), decaying ~78× within 16

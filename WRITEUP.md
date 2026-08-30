@@ -27,42 +27,55 @@ what actually ran.
 ## 1. It can hide computation — and it perturbs interpretability either way
 
 To show the strong version you need a case where the multi-step computation is
-real and measurable. A 2-layer, width-16 transformer trained from scratch on
-3-digit reversed addition emits its answer in an **uncued mixture**: usually
-digit-by-digit (3 tokens), sometimes as a single "merged" answer token.
+real and measurable. A 2-layer, width-16 transformer (~25k params) is trained
+from scratch on 3-digit reversed addition, on a 50/50 mixture of two
+encodings of the same problems: **all digit tokens** (`7 5 0 + 8 6 0 = 5 2 1`
+— three answer digits, three decode steps) and **all merged tokens**
+(`[750] + [860] = [521]` — the canonical encoding, one answer token, one
+decode step). Re-encoding a digit-token transcript produces exactly the
+merged encoding, token for token, so the stored-as-text version of the
+model's work *is* the second training format.
 
-Sampled at temperature 1 (one sample per problem, 2,000 problems × 3 seeds,
-from the published checkpoints — `retok.sample_eval`):
+Accuracy for every prompt-encoding × answer-format combination
+(restricted-argmax, 4,000 problems, seeds s0/s1 — recomputable from the
+published `retok-mergedops-s*` checkpoints):
 
-| | |
-|---|---|
-| emits digit-by-digit / as one merged token | **71% / 29%** (training mix: 70/30) |
-| accuracy when digit-by-digit | **98–99%** |
-| accuracy when one merged token | **0.7–1.1%** |
-| overall sampled accuracy | **~71%** |
-| per-format argmax (best case): digit-by-digit / merged | 99.9% / 1.3% |
-| how often full-vocab argmax *prefers* the one-token form | **0%** (greedy always goes digit-by-digit) |
-| probability it assigns the correct one-token answer | **0.003** |
-| decode positions: actual → re-tokenized | **3 → 1** (whole transcript 13 → 7) |
-| probability of the answer given the *re-tokenized* transcript | **0.0003–0.0007** (per seed) |
+| prompt \ answer | digit-by-digit | merged one-token |
+|---|---:|---:|
+| digit operands | **100%** | 0.07% |
+| merged operands | 0.0–0.2% | 0.4–1.7% |
 
-<sub>The merged-branch numbers are conditioned differently, which is worth
-stating because they look inconsistent otherwise. The 1.3% is an argmax
-*restricted to the merged-token subspace* — "if it goes down the one-token
-branch, does it pick the right one?" The 0.003 is *unconditional*, diluted by
-the ~71% of probability mass on the digit branch. Conditional on the merged
-branch the model gives the correct token 0.9% — which matches the sampled
-merged accuracy above (0.7–1.1%), and wins a 1000-way argmax ~1.3% of the
-time; 0.0027 ÷ 0.289 = 0.009 reconciles them. The unconditional number is the
-one the detector below needs, since it asks how likely the transcript is *as
-a one-step generation*.</sub>
+**Exactly one cell works.** The model cannot produce the merged answer even
+from readable digits, cannot unpack merged operands to compute digit-by-digit,
+and scores ~1% on the all-merged encoding — *half of its own training data*.
+The computation lives entirely in the digit-token pathway. Sampled at
+temperature 1 the format is cued by the prompt encoding: on digit-operand
+prompts it answers digit-by-digit ~100% of the time at 99.8% accuracy. The
+transcript collapse: 13 emitted positions re-encode to 7, the three answer
+decode steps to one, and the model assigns the correct merged answer only
+**0.004–0.006** probability given the re-tokenized transcript.
 
-The model needs the extra decode steps. The stored transcript says it didn't.
+The model needs the extra decode steps. The stored transcript says it didn't —
+and the stored form is precisely the encoding in which the model can do
+nothing.
 
 That also gives a **text-only detector**: re-tokenized transcripts are 100%
-correct while each carries ~0.003 probability as a one-step generation.
-Astronomically unlikely in aggregate, and checkable from text plus logprobs with
-no token-ID logging at all.
+correct while each carries ~0.005 probability as a one-step generation.
+Astronomically unlikely in aggregate, and checkable from text plus logprobs
+with no token-ID logging at all.
+
+**The carry probe fails on the replay even though the replay is
+in-distribution.** A linear probe recovers the deep (two-step) carry at 80–94%
+on the real digit-token stream, but only 55–62% (base rate 50.9%) at the
+re-tokenized positions — on a format the model trained on half the time. The
+information isn't linearly recoverable at the collapsed positions; a probe run
+on the stored transcript reports near-chance for a computation the model
+demonstrably performed. (An earlier variant of this model — trained without
+merged operands, as an uncued 70/30 mixture — behaves the same way on every
+measure, and additionally shows the format choice can be a pure sampling
+event: at temperature 1 it emits the merged form on 29% of samples at <1%
+accuracy. Its checkpoints are published as `retok-main-s*`; full numbers in
+RESULTS.md.)
 
 **In real models the damage has two different ranges.** BPE pre-tokenizes on
 whitespace, so a bad split of one word doesn't change how later words encode —
@@ -414,20 +427,18 @@ direct empirical answer to the first; §3 and §4 are partial ones to the second
 
 - The toy's magnitude is **constructed by design** — we chose the vocabulary and
   the width. It demonstrates the mechanism, not a deployment rate.
-- The re-tokenized replay is **off-distribution** for the headline model:
-  merged tokens only ever follow `=` in its training, so it has never read
-  one as an operand — meaning the collapse in probability and probe accuracy
-  mixes "can't compute it in one step" with "can't read this input".
-  **Resolved by a pre-registered control (2026-08-30):** a variant trained
-  with merged operands in the direct format — making the fully re-tokenized
-  transcript an in-distribution training format, token-for-token — still
-  shows the probe collapse (carry recovery 55–62% on the replay vs a 50.9%
-  base, against 80–100% on the real CoT stream, both converged seeds; see
-  RESULTS.md "Merged-operands variant"). The collapse is positional, not
-  distributional. One knock-on documented there: merged operands make the
-  answer format *cued by the prompt encoding*, so that variant no longer
-  models an uncued mixture — the two variants carry complementary halves of
-  the claim.
+- In the featured model the re-tokenized replay is a trained format, so the
+  probe collapse cannot be blamed on distribution shift; the cost of that
+  design is that the answer format is **cued by the prompt encoding** (digit
+  vs merged operands are distinguishable), so this model does not exhibit an
+  uncued format mixture. The earlier `retok-main-s*` variant (uncued 70/30,
+  digit operands in both formats) shows the sampling-mixture behaviour and
+  the same accuracy/probe pattern; its replay is off-distribution, which is
+  exactly the confound the featured model was pre-registered to remove.
+- **One of three merged-operands seeds undertrained** (s2: CoT 71.8%,
+  degrading with carry-chain length) at the 50/50 data share; the §1 grid
+  and probe numbers are from the two converged seeds, and all three
+  checkpoints are published.
 - The toy's **whole sequence** re-tokenizes, operands included. What decides
   this is not prompt-vs-completion but *which spans the model wrote*: a CoT
   scratchpad routinely restates its inputs before working on them, so asked
