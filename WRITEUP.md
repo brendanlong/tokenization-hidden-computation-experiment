@@ -31,24 +31,31 @@ real and measurable. A 2-layer, width-16 transformer trained from scratch on
 3-digit reversed addition emits its answer in an **uncued mixture**: usually
 digit-by-digit (3 tokens), sometimes as a single "merged" answer token.
 
+Sampled at temperature 1 (one sample per problem, 2,000 problems × 3 seeds,
+from the published checkpoints — `retok.sample_eval`):
+
 | | |
 |---|---|
-| accuracy emitting the answer digit-by-digit | **99.9%** |
-| accuracy emitting it as one token, *given it takes that branch* | **1.3%** |
-| how often it *prefers* the one-token form (full-vocab argmax) | **0%** |
+| emits digit-by-digit / as one merged token | **71% / 29%** (training mix: 70/30) |
+| accuracy when digit-by-digit | **98–99%** |
+| accuracy when one merged token | **0.7–1.1%** |
+| overall sampled accuracy | **~71%** |
+| per-format argmax (best case): digit-by-digit / merged | 99.9% / 1.3% |
+| how often full-vocab argmax *prefers* the one-token form | **0%** (greedy always goes digit-by-digit) |
 | probability it assigns the correct one-token answer | **0.003** |
 | decode positions: actual → re-tokenized | **3 → 1** (whole transcript 13 → 7) |
 | probability of the answer given the *re-tokenized* transcript | **0.0003–0.0007** (per seed) |
 
-<sub>The two middle rows are conditioned differently, which is worth stating
-because they look inconsistent otherwise. The 1.3% is an argmax *restricted to
-the merged-token subspace* — "if it goes down the one-token branch, does it pick
-the right one?" The 0.003 is *unconditional*, diluted by the ~71% of probability
-mass sitting on the digit branch. Conditional on the merged branch the model
-gives the correct token 0.9%, which is what wins a 1000-way argmax ~1.3% of the
-time; 0.0027 ÷ 0.289 = 0.009 reconciles them. The unconditional number is the one
-the detector below needs, since it asks how likely the transcript is *as a
-one-step generation*.</sub>
+<sub>The merged-branch numbers are conditioned differently, which is worth
+stating because they look inconsistent otherwise. The 1.3% is an argmax
+*restricted to the merged-token subspace* — "if it goes down the one-token
+branch, does it pick the right one?" The 0.003 is *unconditional*, diluted by
+the ~71% of probability mass on the digit branch. Conditional on the merged
+branch the model gives the correct token 0.9% — which matches the sampled
+merged accuracy above (0.7–1.1%), and wins a 1000-way argmax ~1.3% of the
+time; 0.0027 ÷ 0.289 = 0.009 reconciles them. The unconditional number is the
+one the detector below needs, since it asks how likely the transcript is *as
+a one-step generation*.</sub>
 
 The model needs the extra decode steps. The stored transcript says it didn't.
 

@@ -40,6 +40,14 @@ uv run python -m retok.eval_sweep
 
 echo
 echo "=============================================================="
+echo "Phase 1 — sampled (temperature-1) format mix and accuracy"
+echo "=============================================================="
+# What the model actually does when sampled: 71%/29% digit/merged split,
+# ~99% vs <1% accurate. WRITEUP.md §1's primary table.
+uv run python -m retok.sample_eval
+
+echo
+echo "=============================================================="
 echo "Phase 2 — wild-caught rates, recomputed from raw token IDs"
 echo "=============================================================="
 # Deliberately recomputes canonicality from the emitted IDs rather than

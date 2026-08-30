@@ -70,6 +70,12 @@
 >   producing script was also not committed; its numbers re-derive from the
 >   published checkpoints to within 0.02pp (restricted argmax 1.29% vs 1.27%
 >   quoted).
+> - **Sampled-accuracy measurement added (2026-08-30, `retok.sample_eval`,
+>   from the published checkpoints):** at temperature 1 the headline model
+>   emits digit-by-digit 71.0–71.5% of samples (98.0–99.2% accurate) and the
+>   merged token 28.4–28.8% (0.69–1.05% accurate), overall ~71%; malformed
+>   ≤0.1%. The Phase-1 table's 99.9%/1.3% are per-format *argmax*
+>   accuracies; the writeup now leads with the sampled numbers.
 
 
 **Question.** Can a model's actual token stream differ from the canonical
