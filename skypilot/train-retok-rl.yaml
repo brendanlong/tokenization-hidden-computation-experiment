@@ -134,8 +134,16 @@ run: |
     uv run --no-sync python -m retok_rl.train ${WANDB_FLAG} \
         --model "${MODEL}" --steps "${STEPS}" --beta "${BETA}" --places "${PLACES}" \
         --entropy-coef "${ENTROPY_COEF}" ${ADAPTIVE_ENTROPY:+--use-adaptive-entropy} \
+        --seed "${SEED}" --output-dir "${OUT}" \
         --wandb-run-name "${RUN_NAME}" 2>&1 | tee "${OUT}/train.txt"
     rc=${PIPESTATUS[0]}
+    # Same artifact escape hatch as the reversal branch: rollouts travel in
+    # the log stream so a dead pod or broken ssh alias cannot lose them.
+    if [ -f "${OUT}/rollouts.jsonl" ]; then
+      echo ">>> ROLLOUTS_B64_BEGIN"
+      gzip -c "${OUT}/rollouts.jsonl" | base64 -w 4000
+      echo ">>> ROLLOUTS_B64_END"
+    fi
     echo ">>> training exited ${rc}"
     exit "${rc}"
   fi

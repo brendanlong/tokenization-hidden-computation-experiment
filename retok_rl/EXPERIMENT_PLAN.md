@@ -285,3 +285,17 @@ CollapseGuard armed, β=0.
 > RESULTS.md Run 5 carries the corrected numbers with a dated note. A
 > `--stop-bonus` reward term (bonus for emitting exactly the answer then
 > EOS) was added for any future run; none is currently planned.
+
+> **Run 6 pre-note (2026-08-30, before launch).** Replication of Run 4
+> (gpt2-large, expansion, identical config: STEPS=2000, BETA=0, PLACES=30,
+> ENTROPY_COEF=0.05, seed 0) whose sole purpose is artifact collection: Run 4
+> retained no per-rollout records, so its tokenization metrics cannot be
+> recomputed under the corrected definitions (round-trip canonicality;
+> correct-region per-token metrics; per-position). The harness now writes
+> rollouts.jsonl (ported from Arm C) and runs a step-0 baseline eval, which
+> Run 4 lacked. Expectations, stated in advance: Run 4's qualitative result
+> (canonical per-rollout falls, movement lands on greedy-longest, "other"
+> stays small) should replicate; the new correct-region metrics are the
+> primary read and we state no directional prediction for them beyond the
+> Run 4 recovery data (single-digit tokens low throughout, digit runs
+> lengthening with reward). Single seed, same as Run 4.

@@ -15,8 +15,10 @@ once the task is mastered.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from collections import defaultdict
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import torch
@@ -122,21 +124,30 @@ class TokenizationEval(TrainerCallback):
         every: int,
         n_samples: int,
         use_wandb: bool,
+        jsonl_path: Path | None = None,
+        run_name: str = "",
+        seed: int = 0,
         n_eval_prompts: int = 24,
     ) -> None:
         self.model, self.tok = model, tok
         self.train_ex, self.held_ex = train_ex, held_ex
         self.places, self.every, self.n = places, every, n_samples
         self.use_wandb = use_wandb
+        # Per-rollout artifact retention (ported from the reversal arm after
+        # Run 4 shipped with training-log metrics only). Stamped with run
+        # identity: the file is opened in append mode.
+        self.jsonl_path = jsonl_path
+        self.run_name, self.seed = run_name, seed
         self.n_eval_prompts = n_eval_prompts
 
     @torch.no_grad()
     def _rollouts(
-        self, examples: list[Example]
+        self, examples: list[Example], split: str, step: int
     ) -> tuple[list[Rollout], dict[str, list[Rollout]]]:
         self.model.eval()
         out: list[Rollout] = []
         by_class: dict[str, list[Rollout]] = defaultdict(list)
+        records = []
         for ex in examples:
             # Build the tensor explicitly: BatchEncoding's typing confuses the
             # checker, and this is unambiguous about what reaches generate().
@@ -153,11 +164,66 @@ class TokenizationEval(TrainerCallback):
             )
             for seq in gen:
                 out_ids = seq[ids.shape[1] :].tolist()
-                kept, _ = tokens_covering_digits(self.tok, out_ids)
-                out.append((kept, ex.target))
-                by_class[divisor_class(ex.b)].append((kept, ex.target))
+                kept, digits = tokens_covering_digits(self.tok, out_ids)
+                out.append((out_ids, ex.target))
+                by_class[divisor_class(ex.b)].append((out_ids, ex.target))
+                records.append(
+                    {
+                        "run": self.run_name,
+                        "seed": self.seed,
+                        "step": step,
+                        "split": split,
+                        "b": ex.b,
+                        "target": ex.target,
+                        "completion_ids": out_ids,
+                        "kept_ids": kept,
+                        "digits": digits,
+                        "leading_correct": leading_correct(digits, ex.target),
+                    }
+                )
+        if self.jsonl_path is not None:
+            with self.jsonl_path.open("a") as f:
+                for r in records:
+                    f.write(json.dumps(r) + "\n")
         self.model.train()
         return out, by_class
+
+    def run_eval(self, step: int) -> None:
+        # Subsample train prompts: eval is ~10x the cost of a training step,
+        # and the train-side estimate does not need all 77 divisors every time.
+        sample = self.train_ex[:: max(1, len(self.train_ex) // self.n_eval_prompts)]
+        roll, by_class = self._rollouts(sample, "train", step)
+        metrics = {f"train/{k}": v for k, v in summarise(self.tok, roll).items()}
+        for cls, rs in by_class.items():
+            s = summarise(self.tok, rs)
+            metrics[f"class/{cls}/frac_single_digit"] = s["frac_single_digit_tokens"]
+            metrics[f"class/{cls}/mean_reward"] = s["mean_reward"]
+        held, _ = self._rollouts(self.held_ex, "heldout", step)
+        metrics.update(
+            {f"heldout/{k}": v for k, v in summarise(self.tok, held).items()}
+        )
+        log_metrics(metrics, step=step, enabled=self.use_wandb)
+        print(
+            f"  step {step:>5}  reward {metrics['train/mean_reward']:6.2f}"
+            f"  single-digit {metrics['train/frac_single_digit_tokens']:6.1%}"
+            f"  canon {metrics['train/attractor/canonical']:5.1%}"
+            f"  greedy {metrics['train/attractor/greedy-longest']:5.1%}"
+            f"  nc-tok {metrics['train/roundtrip/tok_non_canonical']:5.2%}"
+            f"  cr-single {metrics['train/correct_region/frac_single_digit']:5.1%}"
+            f"  held-out reward {metrics['heldout/mean_reward']:5.2f}",
+            flush=True,
+        )
+
+    def on_train_begin(
+        self,
+        args: TrainingArguments,
+        state: TrainerState,
+        control: TrainerControl,
+        **kwargs: object,
+    ) -> None:
+        # Step-0 baseline (ported from the reversal arm): the reference every
+        # drift claim is measured against.
+        self.run_eval(0)
 
     def on_step_end(
         self,
@@ -168,28 +234,7 @@ class TokenizationEval(TrainerCallback):
     ) -> None:
         if state.global_step % self.every or state.global_step == 0:
             return
-        # Subsample train prompts: eval is ~10x the cost of a training step,
-        # and the train-side estimate does not need all 77 divisors every time.
-        sample = self.train_ex[:: max(1, len(self.train_ex) // self.n_eval_prompts)]
-        roll, by_class = self._rollouts(sample)
-        metrics = {f"train/{k}": v for k, v in summarise(self.tok, roll).items()}
-        for cls, rs in by_class.items():
-            s = summarise(self.tok, rs)
-            metrics[f"class/{cls}/frac_single_digit"] = s["frac_single_digit_tokens"]
-            metrics[f"class/{cls}/mean_reward"] = s["mean_reward"]
-        held, _ = self._rollouts(self.held_ex)
-        metrics.update(
-            {f"heldout/{k}": v for k, v in summarise(self.tok, held).items()}
-        )
-        log_metrics(metrics, step=state.global_step, enabled=self.use_wandb)
-        print(
-            f"  step {state.global_step:>5}  reward {metrics['train/mean_reward']:6.2f}"
-            f"  single-digit {metrics['train/frac_single_digit_tokens']:6.1%}"
-            f"  canon {metrics['train/attractor/canonical']:5.1%}"
-            f"  greedy {metrics['train/attractor/greedy-longest']:5.1%}"
-            f"  held-out reward {metrics['heldout/mean_reward']:5.2f}",
-            flush=True,
-        )
+        self.run_eval(state.global_step)
 
 
 def main() -> None:
@@ -238,6 +283,10 @@ def main() -> None:
         [{"prompt": e.prompt, "target": e.target, "b": e.b} for e in train_ex]
     )
 
+    out_dir = Path(a.output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    jsonl_path = out_dir / "rollouts.jsonl"
+
     run_name = a.wandb_run_name or f"retok_rl_beta{a.beta}_{a.places}p"
     init_wandb(
         enabled=not a.no_wandb,
@@ -281,11 +330,15 @@ def main() -> None:
                 a.eval_every,
                 a.eval_samples,
                 not a.no_wandb,
+                jsonl_path,
+                run_name,
+                a.seed,
             )
         ],
     )
     trainer.train()
     finish_wandb(enabled=not a.no_wandb)
+    print(f"rollout artifacts: {jsonl_path}")
 
 
 if __name__ == "__main__":
