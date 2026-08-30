@@ -44,17 +44,18 @@ adversary required.
    completely. On six API-measurable frontier models the same probe gets 97–100%
    compliance and **0 induced of 346** compliant productions.
 
-4. **RL drift off canonical is real but task- and lineage-dependent (two
-   pre-registered arms).** GRPO on gpt2-large, rewarding correct digits of the
-   *decoded* text (RLVR-style, blind to tokenization), took canonical from
-   100% to **61.5%** of rollouts in 2,000 steps — mostly reward-dense
-   greedy-longest chunks (37.5%), with all-single-digit rising late to 1.6%.
-   But the same pressure on a modern model (Qwen2.5-3B, word reversal — the
-   task where per-character emission genuinely pays) **did not support the
-   pre-registered compute-attractor prediction**: reward roughly doubled
-   while single-character token usage *fell* 20% → 10% (a transient rise to
-   9.5% of rollouts decayed as a correct-prefix-plus-junk reward hack took
-   over). A null with pre-registered caveats. See [`retok_rl/`](retok_rl/).
+4. **Two pre-registered RL arms under a tokenization-blind reward (pilot).**
+   GRPO on gpt2-large (decimal expansion, reward = correct digits of the
+   *decoded* text): canonical segmentation fell 100% → **61.5%** of rollouts
+   in 2,000 steps, mostly to greedy-longest chunks; all-single-digit reached
+   1.6% at the cap. GRPO on Qwen2.5-3B (word reversal, artifact-backed):
+   reward roughly doubled while segmentation stayed put — per-token
+   round-trip canonicality flat (6.7% → 4.8%), all-single-char 0% of correct
+   answers throughout, single-char token share 20% → 10%. The pre-registered
+   compute-attractor prediction was not supported (with pre-registered
+   caveats: final reward sits in the plan's weak-evidence band, and the
+   prefix-only reward concentrated pressure on ~2 characters). See
+   [`retok_rl/`](retok_rl/).
 
 ![All 17 models, 2019–2025: falling but lineage-dependent](figures/phase2_overview.png)
 

@@ -81,7 +81,7 @@ failures. A missing `WANDB_API_KEY` no longer kills a run (falls back to
 `--no-wandb`). Pass `token=` explicitly to `from_pretrained`; images may ship a
 stored HF token that shadows the env var.
 
-## Run 5 — Arm C: word reversal, Qwen2.5-3B-Instruct (`retok-rl-reversal-s0`) — NULL for the compute attractor, with a reward hack
+## Run 5 — Arm C: word reversal, Qwen2.5-3B-Instruct (`retok-rl-reversal-s0`)
 
 ```
 sky launch skypilot/train-retok-rl.yaml -c retok-rl-rev --infra runpod --gpus A40:1 \
@@ -91,74 +91,83 @@ sky launch skypilot/train-retok-rl.yaml -c retok-rl-rev --infra runpod --gpus A4
 
 A40, 1h00m training (~$0.45; plus ~$0.15 across three failed launches — see
 infra notes). Pre-registered in EXPERIMENT_PLAN.md Arm C *before* launch.
-Per-rollout artifacts retained this time: 16,564 records (token IDs, targets,
-attractor, correctness per eval) in `rollouts.jsonl`; step-0 baseline eval
-runs before any training. wandb: `retok-rl-reversal-s0`, project `retok_rl`.
+Config: GRPO, batch 16, 16 generations/group, lr 1e-5, temp 1.0 pure
+sampling, bf16, `entropy_coef=0.05` — the same value as the expansion arm,
+chosen once after the no-bonus run (Run 1) collapsed, not tuned; `beta=0`;
+`--stop-bonus` did not exist yet (reward was leading-correct only).
+Artifacts: 16,564 per-rollout records (token IDs, targets, per-eval) in
+`rollouts.jsonl`; step-0 baseline eval before any training. wandb:
+`retok-rl-reversal-s0`, project `retok_rl`.
 
-| step | reward | exact | attempted | single-char toks | canonical | greedy-longest | other | held reward |
-|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 0 | 0.92 | 6.0% | 95.2% | 20.0% | 85.7% | 1.2% | 9.5% | 1.08 |
-| 550 | 1.61 | 1.2% | 85.7% | 10.9% | 79.2% | 4.2% | 15.5% | 1.40 |
-| 1150 | 1.86 | 1.8% | 91.7% | 11.8% | 81.5% | 0.6% | 17.9% | 1.67 |
-| 2000 | **1.94** | **0.6%** | 89.3% | **10.4%** | **73.2%** | 3.6% | **22.6%** | **1.61** |
+> **Metric correction (2026-08-30) — supersedes the tokenization numbers in
+> earlier revisions of this entry and in PR #13's first description.** The
+> original per-eval "canonical / greedy / other" attractor metric had two
+> defects: it lowercased the produced surface before comparing segmentations
+> (misfiling canonically-tokenized uppercase output as "other"), and it was
+> computed over all rollouts, so text that was simply *wrong* — junk letters
+> included — could move it. An unexpected-but-canonical token is not a
+> non-canonical token: wrong text contributes zero to segmentation metrics.
+> The tables below use the corrected metrics (now in `reversal.py`, all
+> recomputable from `rollouts.jsonl`): **round-trip canonicality**
+> (`encode(decode(ids)) != ids`, the project's core metric — per token, per
+> answer-run, and per generation) for arbitrary emitted text, and the
+> **attractor mix over compliant rollouts only** for segmentation of the
+> answer. This also retracts the "transient rise of the compute attractor to
+> 9.5% at step 150" claim from the previous revision — that spike was the
+> defective metric counting short junk runs; under the corrected metric,
+> all-single-char is 0% of compliant answers at every eval.
 
-**Prediction 1 (primary) is not supported.** Reward roughly doubled
-(0.92 → 1.94 leading chars; held-out 1.08 → 1.61) while the fraction of
-single-character tokens *fell* from 20% to ~10% (19.9% → 7.0% restricted to
-the tokens actually covering the target region) — on the task built to favour
-the compute attractor, with the channel measurably open (canonical
-segmentations of reversed words are 81% multi-char tokens in this tokenizer).
-The all-single-char attractor rose only transiently: 1.8% at step 0 to a peak
-of **9.5%** of train rollouts at step 150 (held-out 9.3%), decaying below
-baseline as the prefix hack took over. Greedy-longest stayed in baseline
-noise (0.0–6.5%).
+**What changed, step 0 → 2000** (train split; 41 evals in the artifacts):
 
-**The canonical decline (85.7% → 73.2%) is non-compliance, not segmentation
-drift.** Nothing in the reward penalises trailing garbage or casing. The
-policy learned to emit a correct 2–3 character prefix followed by junk
-(len-ratio rose 0.92 → 1.45; exact-match collapsed even as leading-correct
-rose, len-3 words 25% → 4%; the grown "other" bucket is prefix-plus-junk:
-`car → ['rac','HttpPost']`, `nut → [' tut','ген','Pizza']`), and uppercase
-output rose from 0.7% to 18.3% of letter runs — which the classifier counts
-as "other" by construction, since it compares segmentations case-sensitively
-against the lowercase target. Canonical falls about as much among
-length-matched rollouts (91.5% → 72.7%), so the decline tracks these
-compliance-surface changes, not a re-segmentation of correctly produced
-strings.
+| metric | 0 | 150 | 550 | 1150 | 2000 |
+|---|---:|---:|---:|---:|---:|
+| reward (leading correct chars; mean target len 5.5) | 0.92 | 1.04 | 1.61 | 1.86 | 1.94 |
+| held-out reward | 1.08 | 0.84 | 1.40 | 1.67 | 1.61 |
+| exact match | 6.0% | 0.6% | 1.2% | 1.8% | 0.6% |
+| completion length ratio (produced/target) | 0.92 | 1.40 | 1.20 | 1.24 | 1.45 |
+| single-char tokens over the letter run | 20.0% | 19.2% | 10.9% | 11.8% | 10.4% |
+| **round-trip non-canonical, per token** | 6.7% | 3.9% | 5.9% | 4.5% | **4.8%** |
+| **round-trip non-canonical, answer run only** | 6.7% | 8.3% | 8.3% | 4.2% | **6.0%** |
+| round-trip non-canonical, per generation | 7.7% | 26.7% | 46.8% | 36.6% | 37.3% |
+| excluded (U+FFFD, unmeasurable) | 0.0% | 1.8% | 17.3% | 20.2% | 10.7% |
 
-**Prediction 3 (capability gate) is partly triggered — stated up front, so
-stating it now.** The plan designated reward staying at ~1–2 chars as "a
-capability null... weak evidence either way". Final reward (1.94 train /
-1.61 held-out, against mean target length 5.55) sits at the top of that
-band, and the reward hack means the serial-reversal mechanism was under
-selection pressure only for the first ~2 characters (full correct reversals,
-even allowing trailing junk, fell 9.5% → 2.4%). This arm is therefore a
-null with caveats, not a clean refutation: the defensible claim is "under
-this reward, on the most favourable task we could build, the compute
-attractor did not emerge in 2,000 steps".
+Held-out tracks train on every metric (e.g. per-token round trip 4.2% →
+4.7%). Notes on reading the table:
 
-**Prediction 2 (held-out more single-char than train at matched reward): no
-support.** Late-training single-char fractions are 11.4% (train) vs 12.5%
-(held-out) — flat.
+- The **per-generation** round-trip rate rose 7.7% → 37.3% while the
+  **per-token** rate stayed flat — completions grew from ~2.5 tokens to the
+  16-token cap, and a sequence-level flag accumulates with length
+  (non-recovering BPE; the same length effect documented for Phase 2). The
+  added tokens are unrewarded trailing text after the scored prefix: the
+  reward stops counting at the first mismatch (and at target exhaustion), so
+  output there is neither rewarded nor penalised.
+- **Segmentation of the answer, where defined** (compliant rollouts, i.e.
+  exact matches): canonical 91.2% pooled over steps 0–150 (n=34), 100%
+  pooled over steps 1500–2000 (n=41); all-single-char 0% at every eval.
+  Exact matches collapsed (6.0% → 0.6%; length-3 words 25% → 4%), so late n
+  is small.
+- The step-0 per-token rate (6.7% train / 4.2% held-out) is far above
+  Qwen2.5's Phase-2 english rate (0.00%); reversed-word text is
+  off-distribution, the regime Phase 2 measured as high-rate.
 
-**Reading.** On a modern instruct model with a modern tokenizer, 2,000 GRPO
-steps of tokenization-blind reward on the compute-aligned task produced no
-sustained movement into either non-canonical attractor — the policy moved
-toward chunkier tokens and non-compliant surface forms (junk suffixes,
-uppercase), not toward alternative segmentations of the target. The
-contrast with Run 4 (gpt2-large drifting to greedy-longest chunks) says drift
-is task- and lineage-dependent, not a general RLVR property. Design lesson
-for any follow-up arm: leading-correct reward without an exactness/termination
-term invites the prefix+junk hack; use exact-match bonus or penalise trailing
-text.
+**Prediction status.** P1 (single-char fraction rises with reward): not
+supported — reward roughly doubled, single-char fell 20.0% → 10.4%, and
+all-single-char is 0% of compliant answers throughout. P2 (held-out more
+single-char than train at matched reward): no difference (late: 11.4% train
+vs 12.5% held-out). P3 (capability gate): final reward 1.94/1.61 against
+mean target length 5.5 sits inside the ~1–2 char band the plan marked in
+advance as "weak evidence either way"; additionally, because the reward
+scores only the leading correct prefix, selection pressure concentrated on
+the first ~2 characters (full correct reversals fell 9.5% → 2.4% even
+allowing trailing text). Single seed.
 
-Caveats: single seed; reward far from mastery (1.94 of mean target length
-~5.5); 2,000 steps; the reward hack contaminates the canonical-attractor
-metric, and the single-char token fraction is itself diluted by junk
-(non-ASCII letters appear in 10.1% → 39.4% of letter runs over training,
-and each multi-char junk token inflates the denominator) — restricted to
-tokens covering the target region it falls 19.9% → 7.0%, same direction,
-stronger.
+**Harness notes for future runs** (no further runs currently planned):
+`--stop-bonus B` now exists (extra reward when the completion is exactly the
+answer followed by EOS — trains the policy to stop after getting it right);
+the prompt embeds the word in quotes, and the canonical encoding of `"word`
+splits some words that would be single tokens after a space (`"garden` →
+`['g','arden']`, vs ` garden` as one token) — canonical by construction, but
+a future run wanting guaranteed single-token inputs should drop the quotes.
 
 ### Infra notes (attempts 1–3, all pre-training failures, ~$0.15 total)
 

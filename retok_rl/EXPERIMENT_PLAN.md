@@ -276,3 +276,12 @@ retained — this arm should be independently recomputable like Phase 1–3.
 
 **Budget.** ~2,000 GRPO steps on an A40 (~$2), entropy_coef 0.05,
 CollapseGuard armed, β=0.
+
+> **Arm C amendment (2026-08-30, post-run annotation).** The attractor
+> metric shipped for Run 5 lowercased produced surfaces and pooled
+> non-compliant rollouts; both defects are corrected in `reversal.py`
+> (round-trip canonicality of the emitted tokens as the primary
+> tokenization metric; attractor mix over compliant rollouts only) and
+> RESULTS.md Run 5 carries the corrected numbers with a dated note. A
+> `--stop-bonus` reward term (bonus for emitting exactly the answer then
+> EOS) was added for any future run; none is currently planned.

@@ -60,7 +60,7 @@ if TYPE_CHECKING:
 MAX_WORD_LEN = 8
 
 
-def make_reward() -> Callable[..., list[float]]:
+def make_reward(stop_bonus: float = 0.0) -> Callable[..., list[float]]:
     """Reward = count of correct leading letters, on the DECODED completion.
 
     Absolute count, not a fraction — same anti-hack rationale as the
@@ -78,10 +78,17 @@ def make_reward() -> Callable[..., list[float]]:
     """
 
     def reward(completions: list[str], target: list[str], **_: object) -> list[float]:
-        return [
-            float(leading_correct(letter_prefix(c), t))
-            for c, t in zip(completions, target, strict=True)
-        ]
+        out = []
+        for c, t in zip(completions, target, strict=True):
+            r = float(leading_correct(letter_prefix(c), t))
+            # Optional termination shaping (off for Run 5; available for
+            # future runs): bonus when the completion IS the answer and
+            # nothing follows it — i.e. the model emitted EOS right after
+            # getting it right, instead of unrewarded trailing output.
+            if stop_bonus and c.strip().lower() == t:
+                r += stop_bonus
+            out.append(r)
+        return out
 
     return reward
 
@@ -143,8 +150,8 @@ class ReversalEval(TrainerCallback):
             for seq in gen:
                 out_ids = seq[ids.shape[1] :].tolist()
                 kept, produced = tokens_covering_letters(self.tok, out_ids)
-                out.append((kept, ex.target))
-                by_len[len(ex.word)].append((kept, ex.target))
+                out.append((out_ids, ex.target))
+                by_len[len(ex.word)].append((out_ids, ex.target))
                 records.append(
                     {
                         "run": self.run_name,
@@ -156,10 +163,12 @@ class ReversalEval(TrainerCallback):
                         "completion_ids": out_ids,
                         "kept_ids": kept,
                         "produced": produced,
+                        # segmentation-of-answer label; only meaningful when
+                        # produced.lower() == target (see classify_letters)
                         "attractor": classify_letters(self.tok, kept, produced)
                         if kept
                         else "empty",
-                        "leading_correct": leading_correct(produced, ex.target),
+                        "leading_correct": leading_correct(produced.lower(), ex.target),
                     }
                 )
         with self.jsonl_path.open("a") as f:
@@ -188,10 +197,10 @@ class ReversalEval(TrainerCallback):
             f"  exact {metrics['train/exact_match']:5.1%}"
             f"  attempted {metrics['train/attempted']:5.1%}"
             f"  single-char {metrics['train/frac_single_char_tokens']:6.1%}"
-            f"  canon {metrics['train/attractor/canonical']:5.1%}"
-            f"  greedy {metrics['train/attractor/greedy-longest']:5.1%}"
+            f"  nc-gen {metrics['train/roundtrip/gen_non_canonical']:5.1%}"
+            f"  nc-tok {metrics['train/roundtrip/tok_non_canonical']:5.2%}"
             f"  held reward {metrics['heldout/mean_reward']:5.2f}"
-            f"  held single-char {metrics['heldout/frac_single_char_tokens']:6.1%}",
+            f"  held nc-tok {metrics['heldout/roundtrip/tok_non_canonical']:5.2%}",
             flush=True,
         )
 
@@ -227,6 +236,14 @@ def main() -> None:
     p.add_argument("--lr", type=float, default=1e-5)
     p.add_argument("--beta", type=float, default=0.0, help="KL coefficient")
     p.add_argument("--entropy-coef", type=float, default=0.05)
+    p.add_argument(
+        "--stop-bonus",
+        type=float,
+        default=0.0,
+        help="extra reward when the completion is exactly the answer then EOS "
+        "(0 = Run 5 behaviour; unrewarded trailing output taught the policy "
+        "prefix-then-junk)",
+    )
     p.add_argument("--collapse-patience", type=int, default=20)
     p.add_argument("--eval-every", type=int, default=50)
     p.add_argument("--eval-samples", type=int, default=4)
@@ -290,7 +307,7 @@ def main() -> None:
     )
     trainer = GRPOTrainer(
         model=model,
-        reward_funcs=make_reward(),  # type: ignore[arg-type]
+        reward_funcs=make_reward(a.stop_bonus),  # type: ignore[arg-type]
         args=cfg,
         train_dataset=ds,
         processing_class=tok,

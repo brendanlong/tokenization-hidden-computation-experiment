@@ -252,7 +252,7 @@ conceptualise its output in pieces. But the accessible lever is coarse
 (word-level concatenation), not a controllable encoder, which argues *against* an
 easy steganographic channel.
 
-## 4. Two RL arms: drift off canonical is real, but task- and lineage-dependent
+## 4. RL under a tokenization-blind reward: two pre-registered arms (pilot)
 
 §3 asked whether a *prompt* can move a model off canonical segmentation. The
 RL question is sharper: rewarding the **decoded text** is exactly what RLVR
@@ -289,48 +289,54 @@ Caveats, recorded in `retok_rl/RESULTS.md`: single seed; reward reached 2.99
 of 30, so the task is far from mastered; held-out reward stayed flat (~2.2) —
 this is 77 memorised expansions, not division; the no-entropy-bonus run
 collapsed and is invalid (the result needs `entropy_coef=0.05` to keep
-exploration alive); and per-rollout artifacts were not retained, so unlike
+exploration alive — a value picked once after that collapse and not tuned;
+the reversal arm below reuses it unchanged); and per-rollout artifacts were
+not retained, so unlike
 §1–3 this table comes from training logs rather than published records. Treat
 it as a pilot.
 
-**A second pre-registered arm, on a modern model, fails to support the easy
-generalisation.** Word reversal ("spell `garden` backwards") is the task where
-per-character emission genuinely pays — output order tracks computation order,
-the property the digit task lacked — and Qwen2.5-3B-Instruct's tokenizer
-leaves that channel wide open (canonical segmentations of reversed words are
-81% multi-character tokens, while one-letter-per-token is always available).
-Under the same tokenization-blind reward (correct leading characters of the
-decoded completion), reward roughly doubled over 2,000 GRPO steps (0.92 →
-1.94 leading characters; held-out 1.08 → 1.61) while the fraction of
-single-character tokens **fell** from 20% to ~10% — the pre-registered
-compute attractor rose only transiently (to 9.5% of rollouts at step 150)
-before decaying below its baseline, and greedy-longest never left baseline
-noise. The canonical attractor did decline (85.7% → 73.2%), but the
-per-rollout records attribute that to non-compliance rather than
-segmentation drift: nothing penalises trailing garbage or casing, so the
-policy converged on a correct 2–3 character prefix plus junk
-(`car → ['rac','HttpPost']`; exact-match collapsed 6% → 0.6% even as reward
-rose) alongside a rise in uppercase output — neither is a re-segmentation of
-the target string. Two pre-registered caveats apply and we take them: the
-hack capped selection pressure at the first ~2 characters, and the final
-reward sits inside the ~1–2 character band the plan designated in advance as
-"weak evidence either way". A null with caveats, then, not a clean
-refutation — but on the task and tokenizer most favourable to compute-buying
-segmentation, 2,000 steps produced no sustained movement toward it. This arm
-is artifact-backed (16,564 per-rollout records with token IDs, step-0
-baseline included).
+**The second arm (Arm C): word reversal on Qwen2.5-3B-Instruct.** Reversal
+is the task where per-character emission pays mechanically — output order
+tracks computation order, the property the digit task lacked — and this
+tokenizer leaves the channel open (canonical segmentations of reversed words
+are 81% multi-character tokens; one-letter-per-token is always available).
+Same reward shape (correct leading characters of the decoded completion),
+2,000 GRPO steps, same entropy bonus. This arm is artifact-backed: 16,564
+per-rollout records with token IDs, step-0 baseline included, and every
+number below recomputes from them. What changed, step 0 → 2000:
 
-The two arms together give the honest reading: RLVR exerts no pressure to
-*stay* canonical, but where the policy actually goes is task- and
-lineage-dependent. The gpt2-large arm drifted into reward-dense memorised
-chunks — a monitor's position-keyed analysis of those re-tokenized rollouts
-would be reading segmentations that never ran more than a third of the time.
-The modern-model arm, handed the best mechanistic reason to buy decode
-steps, moved toward *chunkier* tokens and non-compliant surface forms
-instead, and hacked the reward. Neither arm shows the toy's compute-buying
-mechanism becoming the outcome: all-single-digit reached 1.6% at the
-expansion arm's step cap, and the reversal arm's transient rise decayed to
-under 1% as the prefix hack took over.
+| metric | step 0 | step 2000 |
+|---|---:|---:|
+| reward (leading correct chars; mean target length 5.5) | 0.92 | 1.94 |
+| held-out reward | 1.08 | 1.61 |
+| exact match | 6.0% | 0.6% |
+| completion length (ratio to target) | 0.92 | 1.45 (at the 16-token cap) |
+| single-char tokens over the letter run | 20.0% | 10.4% |
+| **non-canonical emission, per token** (`encode(decode(ids)) != ids`) | 6.7% | 4.8% |
+| non-canonical answer runs | 6.7% | 6.0% |
+| non-canonical, per generation | 7.7% | 37.3% |
+
+The per-generation row rises for the reason §2 documents: completions grew
+from ~2.5 tokens to the cap (the reward stops counting at the first mismatch,
+so trailing text after the scored prefix is neither rewarded nor penalised,
+and the policy produces plenty of it), and a sequence-level flag accumulates
+with length. Per-token and answer-region canonicality are flat. Among
+compliant rollouts — exact matches, the only place "which segmentation of
+the answer" is defined — the mix is 91% canonical early and 100% late, with
+all-single-char at 0% throughout; exact matches collapsed to ~1%, so late n
+is small (41 pooled over steps 1500–2000). Two pre-registered notes: the
+reward scores only the leading correct prefix, so selection pressure
+concentrated on the first ~2 characters; and the final reward sits inside
+the ~1–2 character band the plan marked in advance as "weak evidence either
+way". Single seed.
+
+Summarising both arms by what moved: in the expansion arm the segmentation
+of emitted digits moved (canonical 100% → 61.5% of rollouts, mostly to
+greedy-longest chunks, all-single-digit reaching 1.6% at the step cap); in
+the reversal arm segmentation did not move (per-token canonicality flat,
+all-single-char 0% of compliant answers) — the correctness and length
+metrics moved instead. Neither arm produced the toy's compute-buying form
+in more than trace amounts.
 
 ## What we're claiming, and what was already known
 
