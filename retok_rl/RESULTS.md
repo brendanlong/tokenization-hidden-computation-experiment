@@ -213,3 +213,63 @@ a future run wanting guaranteed single-token inputs should drop the quotes.
    requires stripping ANSI colour codes *before* removing the
    `(cluster, pid=N)` prefixes — `scripts/extract_rollouts_from_log.sh`
    does both and round-trips byte-identically.
+
+## Run 6 — gpt2-large expansion replication with artifacts (`retok-rl-gpt2large-r2`)
+
+```
+sky launch skypilot/train-retok-rl.yaml -c retok-rl-exp --infra runpod --gpus A40:1 \
+  --down --yes --retry-until-up --secret WANDB_API_KEY --env TASK=expansion \
+  --env RUN_NAME=retok-rl-gpt2large-r2 --env STEPS=2000 --env MODEL=openai-community/gpt2-large
+```
+
+A40, 1h07m (~$0.50). Identical config to Run 4 (2,000 steps, β=0, 30 places,
+`entropy_coef=0.05`, seed 0); purpose pre-noted in EXPERIMENT_PLAN.md —
+artifact collection, since Run 4 retained no per-rollout records. This run
+writes them (15,416 records incl. a step-0 baseline Run 4 lacked; wandb
+`retok-rl-gpt2large-r2`) and computes the corrected metric families live.
+All numbers below recompute from `rollouts.jsonl` via `metrics.summarise`.
+
+**What changed, step 0 → 2000** (train split):
+
+| metric | 0 | 400 | 800 | 1200 | 1600 | 2000 |
+|---|---:|---:|---:|---:|---:|---:|
+| reward (correct leading digits of 30) | 0.27 | 1.57 | 2.28 | 2.48 | 2.74 | 2.72 |
+| digits emitted (mean) | 3.0 | 3.1 | 3.1 | 3.2 | 4.6 | 4.9 |
+| canonical attractor (emitted digit run, right or wrong) | 89.9% | 98.1% | 98.6% | 96.2% | 76.0% | **71.2%** |
+| greedy-longest attractor | 0.5% | 1.9% | 1.4% | 3.8% | 23.6% | **27.9%** |
+| all-single-digit attractor | 6.7% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| other | 2.4% | 0.0% | 0.0% | 0.0% | 0.5% | 1.0% |
+| single-digit tokens (share of digit tokens) | 13.9% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| **round-trip non-canonical, per token (full completion)** | 0.55% | 8.24% | 4.95% | 5.52% | 6.99% | **6.11%** |
+| correct-region single-digit | 83.3% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
+| correct-region non-canonical | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.7% |
+| excluded (U+FFFD) | 0.5% | 16.8% | 23.1% | 20.2% | 23.1% | 27.4% |
+
+Held-out at 2000: reward 2.28, canonical 68.5%, greedy-longest 29.8%,
+per-token round trip 6.46% — tracks train on every metric.
+
+Reading notes:
+
+- **Replicates Run 4's direction at somewhat smaller magnitude**: canonical
+  fell to 71.2% here vs 61.5% in Run 4, greedy-longest reached 27.9% vs
+  37.5%, reward 2.72 vs 2.99, digits emitted 4.9 vs 5.2. Same config, new
+  GPU/nondeterminism; treat the two as the run-to-run spread.
+- **The step-0 baseline (which Run 4 lacked) changes the shape of the
+  story**: untrained gpt2-large is only ~90% canonical on its emitted digit
+  runs, with 14% single-digit tokens and a 6.7% all-single-digit attractor.
+  Early RL first *concentrates onto canonical* (98.6% by step 800, single-
+  digit tokens → 0 immediately) and only later drifts to greedy-longest. So
+  "canonical 100% → 61.5%" (Run 4's step-50 start) understates the untrained
+  baseline's non-canonicality and overstates the peak: the RL arc is
+  concentrate-then-chunk.
+- **Per-token round-trip canonicality rose 0.55% → ~6%** — genuine
+  segmentation drift under the same metric that stayed flat for the Qwen
+  reversal arm (6.7% → 4.8%). This is the clean cross-arm contrast.
+- Correct-region metrics are less informative for this arm: correct leading
+  digits are few (~2–5), short digit strings' canonical and greedy
+  segmentations usually coincide, and a long memorised token straddling the
+  correct/incorrect boundary is excluded from the region by construction.
+  Report them, but the digit-run attractor and the per-token round trip
+  carry the story here.
+- The U+FFFD exclusion rate grows to ~27% (trailing bytes after the digit
+  run); measurable-subset caveat as in Run 5.
