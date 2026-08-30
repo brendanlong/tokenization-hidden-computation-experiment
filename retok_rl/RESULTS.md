@@ -72,6 +72,21 @@ Caveats: single seed; reward 2.99/30, so the task is far from mastered; 77
 memorised sequences, not division; held-out reward flat (~2.2) — no
 generalisation.
 
+> **Annotation (2026-08-30, recovered from wandb `viviclnk`; no per-rollout
+> artifacts exist for this run).** Two clarifications to the table above:
+> (a) the "single-digit" column is `frac_single_digit_tokens` — the fraction
+> of emitted digit tokens of length 1 — NOT the all-single-digit *attractor*,
+> which stayed 0.0–0.5% throughout and was 0.0% at step 2000; (b) mean digits
+> emitted grew 2.1 → 3.0 → 3.1 → 4.5 → 5.0 → 5.2 across the tabulated steps,
+> and longer digit runs mechanically depress the per-rollout canonical rate,
+> so part of the canonical decline is a length effect. The "other" attractor
+> stayed ≤2.4% at every eval — deviations from canonical landed almost
+> exactly on greedy-longest rather than scattering — which is the evidence
+> that the segmentation movement is real and specific rather than a length
+> artifact alone. No per-token round-trip canonicality was computed for this
+> arm and it cannot be recomputed retroactively (training logs only); a
+> rerun with the Run-5-style artifact retention would close that gap.
+
 ## Infrastructure notes
 
 RunPod image resolves Python 3.14 where `dill`/`datasets` breaks — pinned via

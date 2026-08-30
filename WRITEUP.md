@@ -268,22 +268,33 @@ chunks, where one correct prediction covers 2–16 digits. Staying canonical is
 a needle: greedy-longest differs from canonical for 93 of 98 divisors, so the
 null requires landing on precisely BPE's merge-order segmentation.
 
-| GRPO step | canonical | greedy-longest | all-single-digit |
-|---:|---:|---:|---:|
-| 50 | 100.0% | 0.0% | 0.0% |
-| 400 | 99.0% | 0.5% | 0.0% |
-| 800 | 95.2% | 3.4% | 0.0% |
-| 1200 | 79.3% | 19.2% | 0.0% |
-| 1600 | 69.2% | 27.9% | 0.3% |
-| 2000 | **61.5%** | **37.5%** | **1.6%** |
+| GRPO step | digits emitted | canonical | greedy-longest | single-digit tokens |
+|---:|---:|---:|---:|---:|
+| 50 | 2.1 | 100.0% | 0.0% | 0.0% |
+| 400 | 3.0 | 99.0% | 0.5% | 0.0% |
+| 800 | 3.1 | 95.2% | 3.4% | 0.0% |
+| 1200 | 4.5 | 79.3% | 19.2% | 0.0% |
+| 1600 | 5.0 | 69.2% | 27.9% | 0.3% |
+| 2000 | 5.2 | **61.5%** | **37.5%** | **1.6%** |
+
+<sub>Columns from the training logs (wandb `viviclnk`; no per-rollout
+artifacts were retained for this arm). "Canonical"/"greedy-longest" are
+per-rollout classifications of the emitted digit run against its own
+canonical/greedy segmentation; "single-digit tokens" is the fraction of
+emitted digit tokens of length 1 (the all-single-digit *attractor* stayed
+0.0–0.5% throughout, 0.0% at the cap — an earlier revision misread this
+column as the attractor). Two reading notes: digit runs lengthened 2.1 → 5.2
+as reward rose, and longer runs mechanically depress the per-rollout
+canonical rate; and the "other" bucket stayed ≤2.4%, i.e. deviations landed
+almost exactly on greedy-longest rather than scattering.</sub>
 
 **Canonical fell 100% → 61.5% of rollouts in 2,000 steps under a reward blind
-to tokenization, and was still falling at the step cap.** The drift is a mix
-of both predicted attractors, weighted heavily toward memorisation: mostly
-greedy-longest chunks, with the single-digit form appearing late and small
-(0 → 1.6%). It is also capability-gated: gpt2 (124M) at identical settings
-stayed ~99% canonical while failing the task — the drift appeared only once
-the model could actually earn the reward.
+to tokenization, and was still falling at the step cap**, with the movement
+going to greedy-longest; single-digit tokens appeared late and small
+(0 → 1.6% of digit tokens; the all-single-digit form never appeared).
+gpt2 (124M) at identical settings stayed ~99% canonical while failing the
+task (reward 0.97 → 1.44) — the movement appeared only in the model that
+could earn the reward.
 
 Caveats, recorded in `retok_rl/RESULTS.md`: single seed; reward reached 2.99
 of 30, so the task is far from mastered; held-out reward stayed flat (~2.2) —
@@ -331,12 +342,14 @@ the ~1–2 character band the plan marked in advance as "weak evidence either
 way". Single seed.
 
 Summarising both arms by what moved: in the expansion arm the segmentation
-of emitted digits moved (canonical 100% → 61.5% of rollouts, mostly to
-greedy-longest chunks, all-single-digit reaching 1.6% at the step cap); in
+of emitted digits moved (canonical 100% → 61.5% of rollouts, nearly all of
+it to greedy-longest, with "other" ≤2.4% — though digit runs also lengthened
+2.1 → 5.2, which mechanically depresses the per-rollout canonical rate); in
 the reversal arm segmentation did not move (per-token canonicality flat,
 all-single-char 0% of compliant answers) — the correctness and length
-metrics moved instead. Neither arm produced the toy's compute-buying form
-in more than trace amounts.
+metrics moved instead. The compute-buying form appeared in neither arm: the
+all-single-digit attractor was 0% at the expansion cap (single-digit tokens
+1.6%), all-single-char 0% of compliant reversal answers.
 
 ## What we're claiming, and what was already known
 

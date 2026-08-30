@@ -47,8 +47,9 @@ adversary required.
 4. **Two pre-registered RL arms under a tokenization-blind reward (pilot).**
    GRPO on gpt2-large (decimal expansion, reward = correct digits of the
    *decoded* text): canonical segmentation fell 100% → **61.5%** of rollouts
-   in 2,000 steps, mostly to greedy-longest chunks; all-single-digit reached
-   1.6% at the cap. GRPO on Qwen2.5-3B (word reversal, artifact-backed):
+   in 2,000 steps, nearly all to greedy-longest chunks ("other" ≤2.4%);
+   single-digit tokens reached 1.6% of digit tokens, and the all-single-digit
+   attractor stayed 0%. GRPO on Qwen2.5-3B (word reversal, artifact-backed):
    reward roughly doubled while segmentation stayed put — per-token
    round-trip canonicality flat (6.7% → 4.8%), all-single-char 0% of correct
    answers throughout, single-char token share 20% → 10%. The pre-registered
