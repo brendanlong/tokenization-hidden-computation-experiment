@@ -35,6 +35,24 @@ setup: |
   # pyproject allows >=3.12, so uv is free to pick 3.14 unless told otherwise.
   uv python install 3.12
   uv sync --python 3.12 --directory ~/sky_workdir
+  # The lock resolves torch 2.13 (a cu130 wheel), which needs a >=580 driver;
+  # this RunPod fleet runs driver 570 / CUDA 12.8, so cuda_available=False and
+  # the GPU preflight aborts the job (it did, 2026-08-26). Swap in the newest
+  # cu128 build — pyproject allows torch>=2.0.
+  # Purge the lock's cu13 CUDA stack first so no cu13 lib survives alongside
+  # the cu128 torch (a mixed env failed with `undefined symbol: ncclCommResume`).
+  # --index-strategy unsafe-best-match: uv's default first-match strategy
+  # resolves torch from PyPI (where +cu128 builds don't exist) and errors.
+  # NOTE: the run section must use `uv run --no-sync` — a plain `uv run`
+  # re-syncs to the lockfile and reverts this swap (it did, 2026-08-26).
+  cd ~/sky_workdir
+  CUDA_PKGS=$(uv pip list --format=freeze | grep -iE '^(nvidia|cuda-|triton)' | cut -d= -f1 | tr '\n' ' ')
+  uv pip uninstall torch ${CUDA_PKGS} || true
+  uv pip install \
+    --index-url https://download.pytorch.org/whl/cu128 \
+    --extra-index-url https://pypi.org/simple \
+    --index-strategy unsafe-best-match \
+    "torch==2.11.0+cu128"
 
 run: |
   cd ~/sky_workdir
@@ -44,7 +62,7 @@ run: |
   # Fail fast on a bad host rather than burning the run. A broken RunPod box
   # once crash-looped on /dev/dri and sat in INIT for 45 minutes.
   nvidia-smi || { echo ">>> nvidia-smi failed — bad host, relaunch elsewhere"; exit 1; }
-  uv run python -m common.gpu --require-cuda || {
+  uv run --no-sync python -m common.gpu --require-cuda || {
     echo ">>> CUDA not usable on this host — relaunch to land elsewhere"; exit 1; }
 
   # Report which credentials actually arrived, before anything can exit early.
@@ -63,9 +81,15 @@ run: |
   # Smoke first: a few steps proves the reward wiring and the metrics callback
   # before we pay for the real run.
   if [ "${SMOKE:-0}" = "1" ]; then
-    uv run python -m retok_rl.train --model "${MODEL}" \
-      --steps 6 --eval-every 3 --eval-samples 2 --batch-size 4 \
-      --num-generations 4 --places 12 --no-wandb 2>&1 | tee "${OUT}/smoke.txt"
+    if [ "${TASK}" = "reversal" ]; then
+      uv run --no-sync python -m retok_rl.train_reversal --model "${MODEL}" --bf16 \
+        --steps 6 --eval-every 3 --eval-samples 2 --batch-size 4 \
+        --num-generations 4 --output-dir "${OUT}" --no-wandb 2>&1 | tee "${OUT}/smoke.txt"
+    else
+      uv run --no-sync python -m retok_rl.train --model "${MODEL}" \
+        --steps 6 --eval-every 3 --eval-samples 2 --batch-size 4 \
+        --num-generations 4 --places 12 --no-wandb 2>&1 | tee "${OUT}/smoke.txt"
+    fi
     rc=${PIPESTATUS[0]}
     echo ">>> smoke exited ${rc}"
     exit "${rc}"
@@ -86,15 +110,39 @@ run: |
   # token can download the gated repo. huggingface_hub reads HF_TOKEN straight
   # from the environment, which is how the other tasks here authenticate.
 
-  uv run python -m retok_rl.train ${WANDB_FLAG} \
-      --model "${MODEL}" --steps "${STEPS}" --beta "${BETA}" --places "${PLACES}" \
-      --entropy-coef "${ENTROPY_COEF}" ${ADAPTIVE_ENTROPY:+--use-adaptive-entropy} \
-      --wandb-run-name "${RUN_NAME}" 2>&1 | tee "${OUT}/train.txt"
-  rc=${PIPESTATUS[0]}
-  echo ">>> training exited ${rc}"
-  exit "${rc}"
+  if [ "${TASK}" = "reversal" ]; then
+    # Arm C: word reversal. bf16 (3B does not fit an A40 in fp32 training),
+    # rollout artifacts written to ${OUT}/rollouts.jsonl — rsync them off
+    # before the cluster autodowns.
+    uv run --no-sync python -m retok_rl.train_reversal ${WANDB_FLAG} \
+        --model "${MODEL}" --steps "${STEPS}" --beta "${BETA}" --bf16 \
+        --entropy-coef "${ENTROPY_COEF}" --seed "${SEED}" \
+        --output-dir "${OUT}" \
+        --wandb-run-name "${RUN_NAME}" 2>&1 | tee "${OUT}/train.txt"
+    rc=${PIPESTATUS[0]}
+    # Belt-and-suspenders artifact escape hatch: the rollouts also travel in
+    # the log stream as gzip+base64, so a dead pod or an unresolvable ssh
+    # alias (both have happened) cannot lose them.
+    if [ -f "${OUT}/rollouts.jsonl" ]; then
+      echo ">>> ROLLOUTS_B64_BEGIN"
+      gzip -c "${OUT}/rollouts.jsonl" | base64 -w 4000
+      echo ">>> ROLLOUTS_B64_END"
+    fi
+    echo ">>> training exited ${rc}"
+    exit "${rc}"
+  else
+    uv run --no-sync python -m retok_rl.train ${WANDB_FLAG} \
+        --model "${MODEL}" --steps "${STEPS}" --beta "${BETA}" --places "${PLACES}" \
+        --entropy-coef "${ENTROPY_COEF}" ${ADAPTIVE_ENTROPY:+--use-adaptive-entropy} \
+        --wandb-run-name "${RUN_NAME}" 2>&1 | tee "${OUT}/train.txt"
+    rc=${PIPESTATUS[0]}
+    echo ">>> training exited ${rc}"
+    exit "${rc}"
+  fi
 
 envs:
+  TASK: "expansion"             # "reversal" = Arm C (retok_rl.train_reversal)
+  SEED: "0"
   STEPS: "3000"
   BETA: "0.0"                   # arm A. Arm B: >0, asks whether KL suppresses the drift
   # Arm A collapsed with entropy_coef=0: entropy fell 4.65 -> 0.004 nats and every

@@ -252,7 +252,7 @@ conceptualise its output in pieces. But the accessible lever is coarse
 (word-level concatenation), not a controllable encoder, which argues *against* an
 easy steganographic channel.
 
-## 4. And RL drifts off canonical without being asked (pilot)
+## 4. Two RL arms: drift off canonical is real, but task- and lineage-dependent
 
 §3 asked whether a *prompt* can move a model off canonical segmentation. The
 RL question is sharper: rewarding the **decoded text** is exactly what RLVR
@@ -293,13 +293,44 @@ exploration alive); and per-rollout artifacts were not retained, so unlike
 §1–3 this table comes from training logs rather than published records. Treat
 it as a pilot.
 
-The reading that survives those caveats: the standard RLVR reward exerts no
-pressure to stay canonical, and a capable-enough policy drifts off it within a
-few thousand steps — at which point a monitor reading the re-tokenized
-transcript is reading segmentations that never ran for over a third of
-rollouts. What it does *not* show is the toy's mechanism arising
-spontaneously: the compute-relevant single-digit form barely registers, and
-the drift goes where the reward density is.
+**A second pre-registered arm, on a modern model, fails to support the easy
+generalisation.** Word reversal ("spell `garden` backwards") is the task where
+per-character emission genuinely pays — output order tracks computation order,
+the property the digit task lacked — and Qwen2.5-3B-Instruct's tokenizer
+leaves that channel wide open (canonical segmentations of reversed words are
+81% multi-character tokens, while one-letter-per-token is always available).
+Under the same tokenization-blind reward (correct leading characters of the
+decoded completion), reward roughly doubled over 2,000 GRPO steps (0.92 →
+1.94 leading characters; held-out 1.08 → 1.61) while the fraction of
+single-character tokens **fell** from 20% to ~10% — the pre-registered
+compute attractor rose only transiently (to 9.5% of rollouts at step 150)
+before decaying below its baseline, and greedy-longest never left baseline
+noise. The canonical attractor did decline (85.7% → 73.2%), but the
+per-rollout records attribute that to non-compliance rather than
+segmentation drift: nothing penalises trailing garbage or casing, so the
+policy converged on a correct 2–3 character prefix plus junk
+(`car → ['rac','HttpPost']`; exact-match collapsed 6% → 0.6% even as reward
+rose) alongside a rise in uppercase output — neither is a re-segmentation of
+the target string. Two pre-registered caveats apply and we take them: the
+hack capped selection pressure at the first ~2 characters, and the final
+reward sits inside the ~1–2 character band the plan designated in advance as
+"weak evidence either way". A null with caveats, then, not a clean
+refutation — but on the task and tokenizer most favourable to compute-buying
+segmentation, 2,000 steps produced no sustained movement toward it. This arm
+is artifact-backed (16,564 per-rollout records with token IDs, step-0
+baseline included).
+
+The two arms together give the honest reading: RLVR exerts no pressure to
+*stay* canonical, but where the policy actually goes is task- and
+lineage-dependent. The gpt2-large arm drifted into reward-dense memorised
+chunks — a monitor's position-keyed analysis of those re-tokenized rollouts
+would be reading segmentations that never ran more than a third of the time.
+The modern-model arm, handed the best mechanistic reason to buy decode
+steps, moved toward *chunkier* tokens and non-compliant surface forms
+instead, and hacked the reward. Neither arm shows the toy's compute-buying
+mechanism becoming the outcome: all-single-digit reached 1.6% at the
+expansion arm's step cap, and the reversal arm's transient rise decayed to
+under 1% as the prefix hack took over.
 
 ## What we're claiming, and what was already known
 

@@ -206,3 +206,73 @@ non-canonical output is unrepresentable rather than merely unlikely.
   (the toy's story), or because a 10-way choice is easier to retrieve than a
   1000-way one, or both. The claim is about what the model *does*, so this is
   left open rather than asserted either way.
+
+## Arm C (pre-registered 2026-08-26, before any training run): word reversal
+
+The expansion arms measured the channel on a task where memorisation dominates
+and (per the addition null in ../RESULTS.md) output order does not track
+computation order. Reversal is the task with the opposite property, chosen to
+probe the **compute attractor** directly:
+
+- **Output order = computation order.** Emitting the reversed word
+  character-by-character means each decode step needs one more step of a
+  right-to-left scan of the prompt word. Per-char emission aligns computation
+  with emission — exactly the property the addition null identified as
+  required for the extra-decode-steps channel to pay.
+- **The channel is open in a modern tokenizer.** Measured before this plan was
+  written: over 38 reversed common words, 100% have a chunky canonical
+  segmentation (81% of canonical tokens are multi-char, e.g. `esuohthgil` →
+  `['es','u','oh','th','gil']`), while all-single-char is always available
+  (every ASCII letter is a token). This is a *subword/letter* channel — Qwen
+  splits digits, so the digit channel is structurally closed and irrelevant.
+
+**Task.** Reverse a common English word (lengths 3–8, the length is the
+difficulty knob and the analogue of divisor class). Chat-template prompt
+asking for only the reversed word; reward = number of correct leading
+characters of the letter-run of the **decoded** completion (absolute count,
+same anti-length-hack rationale as the expansion arm). Words split
+train/held-out, stratified by length.
+
+**Model: Qwen/Qwen2.5-3B-Instruct**, chosen by measured baseline (temp 1.0,
+6 samples × 6 words per length): 3B already near-masters length 3 (exact
+20/36, leading-correct 1.97/3) with usable signal at every length
+(0.67–1.39 leading-correct at 4–8); 1.5B is too weak (0.27–0.89 everywhere,
+2/216 exact). Both models *attempt* the task at baseline (48/48 produced
+letter-runs ≥3 chars), so compliance is not the limiting factor as it was for
+small-model induction.
+
+**Pre-registered predictions.**
+
+1. **Primary.** If reward climbs, the fraction of letter-run tokens that are
+   single-character rises with it — the *compute* attractor — because
+   reversal is serial and per-char emission aligns computation with emission.
+   This is the opposite weighting from the expansion arm (which drifted to
+   greedy-longest memorised chunks), and the contrast is the point: **which
+   attractor wins should track whether the task is computed or recalled.**
+2. **Memorisation counter-case, called in advance.** Train words can be
+   recalled as wholes, so the train-word mix may drift toward
+   greedy-longest / chunked recall of the reversed surface. If held-out
+   reward rises at all, held-out rollouts should be *more* single-char than
+   train rollouts at matched reward — computation has to happen where recall
+   is impossible.
+3. **Capability gate, stated up front.** If reward stays at baseline
+   (~1–2 chars), this arm is a capability null like gpt2-on-division, and its
+   tokenization curves are weak evidence either way. The "is it even trying"
+   metrics below are logged precisely so that outcome is legible.
+4. **Step-0 baseline is recorded before training** — the attractor mix of the
+   un-trained policy is the reference all drift claims are made against.
+
+**Correctness / effort metrics (logged per eval, per length class, train and
+held-out):** mean leading-correct (the reward), exact-match fraction,
+attempted fraction (letter-run ≥3 chars), mean length-ratio
+(len(produced)/len(target)), and letter-multiset overlap with the target
+(distinguishes "reversing badly" from "ignoring the task"). Tokenization:
+attractor mix (all-single-char / canonical / greedy-longest / other) and
+frac single-char tokens.
+
+**Artifacts.** Unlike the expansion arms, per-rollout records (token IDs,
+target, attractor, correctness, step) are written to JSONL at every eval and
+retained — this arm should be independently recomputable like Phase 1–3.
+
+**Budget.** ~2,000 GRPO steps on an A40 (~$2), entropy_coef 0.05,
+CollapseGuard armed, β=0.
