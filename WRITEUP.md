@@ -361,14 +361,18 @@ corrected wrong digits), and every such first token is canonical for its
 own surface in isolation — the non-canonicality arises at the seam, where
 the canonical segmentation of the extended string re-chunks across the
 boundary (`011`+`33` re-encodes as `01`+`133`). A length-conditioned
-control sharpens what RL did and didn't do: single-token answers are 0%
-non-canonical at every eval, and among multi-token answers the rate
-(9.4% untrained → 46.9% at the cap) tracks the tokenizer's own
-canonical-vs-greedy divergence for strings of the emitted length (~52%
-for 5-digit strings) — so the reward lengthened answers and the policy
-kept extending locked-in tokens, and the non-canonical rate at the seams
-is the tokenizer's geometry, not a segmentation preference the reward
-selected directly (it cannot see segmentation). The emitted form is
+control separates three effects. Composition: single-token answers are
+0% non-canonical at every eval, and their share shrank as reward
+lengthened answers. Policy: at matched digit length, untrained
+multi-token answers are canonical-leaning (5-digit: 0% non-canonical,
+vs the 50% an always-greedy policy would show; 4-digit: 4% vs 80%)
+while step-2000 answers sit on the always-greedy rate cell-for-cell
+(66.7% at 5 digits, 38.6% at 6) — training genuinely moved segmentation
+from canonical-leaning to greedy, which is not a length artifact.
+Geometry: given the greedy policy, the tokenizer determines the
+non-canonical rate at each length (canonical == greedy for 96% of
+3-digit strings but 48% of 5-digit ones), which is why the rate grows
+as answers lengthen. The reward sees none of this; the emitted form is
 never more tokens than canonical, and is strictly fewer in a third of
 multi-token answers. Modal answers, single seed, post-hoc; details in
 `retok_rl/RESULTS.md`.

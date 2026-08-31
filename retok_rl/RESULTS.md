@@ -302,25 +302,29 @@ Reading notes:
   cap. The per-generation digit-run row lands within ~1pt of
   greedy-longest + other at every late eval, as it must — a digit run is
   non-canonical iff it deviates from the canonical segmentation.
-- **Length-conditioned control** (added 2026-08-30, post-hoc): answers
-  that are a single token are 0.0% round-trip non-canonical at every eval
-  (a lone digit token is always its own canonical encoding here), so the
-  aggregate per-token rise is substantially composition — 2+-token answers
-  grew from 3% of rollouts at step 800 to 62% at step 2000. Conditioning
-  on 2+-token answers, the non-canonical rate still rises 9.4% (step 0)
-  → 46.9% (step 2000), but that residual tracks the tokenizer's own
-  geometry for the longer strings being emitted: canonical coincides with
-  greedy-longest for 96% of 3-digit strings but only 48% of 5-digit
-  strings (17% at 4 digits, 8% at 12 — non-monotone), so an always-greedy
-  policy on the step-2000 strings is ~52% non-canonical mechanically.
-  Token-count comparison for the 128 multi-token step-2000 answers:
-  canonical segmentation of the same digits uses the same number of
-  tokens in 87 and MORE tokens in 41, never fewer — the emitted form is
-  never longer than canonical and is strictly more digits-per-token in a
-  third of cases. Net reading: reward lengthened answers and the policy
-  extends locked-in tokens; the non-canonical rate at the seams is then a
-  deterministic property of gpt2's digit tokenization at that length, not
-  something the reward selected for directly (it cannot see it).
+- **Length-conditioned control** (added 2026-08-30, post-hoc; corrected
+  same day — an earlier revision of this note over-attributed the
+  residual to tokenizer geometry): answers that are a single token are
+  0.0% round-trip non-canonical at every eval (a lone digit token is
+  always its own canonical encoding here), so part of the aggregate rise
+  is composition — 2+-token answers grew from 3% of rollouts at step 800
+  to 62% at step 2000. Conditioning on 2+-token answers, the rate still
+  rises 9.4% (step 0) → 46.9% (step 2000), and digit-length-matched
+  cells show this residual is a real policy shift, not a length
+  artifact: untrained multi-token answers are canonical-leaning even at
+  lengths where greedy diverges (5-digit: 0.0% nc, n=8, vs 50%
+  always-greedy; 4-digit: 4.0%, n=25, vs 80% always-greedy), while
+  step-2000 cells sit on the always-greedy rate cell-for-cell (5-digit:
+  66.7% = 66.7%, n=30; 6-digit: 38.6% = 38.6%, n=83; 9-digit: 80% =
+  80%). The tokenizer's geometry (canonical == greedy for 96% of
+  3-digit strings, 48% of 5-digit, 17% of 4-digit, 8% of 12-digit —
+  non-monotone) then sets how much non-canonicality the greedy policy
+  yields at each length. Token-count comparison for the 128 multi-token
+  step-2000 answers: canonical segmentation of the same digits uses the
+  same number of tokens in 87 and MORE tokens in 41, never fewer. Net
+  reading: training moved segmentation of multi-token answers from
+  canonical-leaning to greedy (at matched length), the reward cannot see
+  this, and string length determines the resulting non-canonical rate.
 - **Lock-in + extension check** (added 2026-08-30, post-hoc): of the 26
   train divisors in the step-2000 eval, 13 modal answers are still a
   single token; of the 13 that grew to two tokens, 11 have a first token
