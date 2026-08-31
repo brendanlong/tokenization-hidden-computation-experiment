@@ -374,8 +374,12 @@ non-canonical rate at each length (canonical == greedy for 96% of
 3-digit strings but 48% of 5-digit ones), which is why the rate grows
 as answers lengthen. The reward sees none of this; the emitted form is
 never more tokens than canonical, and is strictly fewer in a third of
-multi-token answers. Modal answers, single seed, post-hoc; details in
-`retok_rl/RESULTS.md`.
+multi-token answers. The composition-free view is the exactly-2-token
+stratum (table in `retok_rl/RESULTS.md`): within it, greedy match goes
+30% → 100% by step 400 and stays there, per-token non-canonicality 12%
+→ 45–80%, while the stratum's share of answers is what grows late
+(2.4% at step 400 → 56.7% at the cap). Modal answers, single seed,
+post-hoc.
 gpt2 (124M) at identical settings stayed ~99% canonical while failing the
 task (reward 0.97 → 1.44) — the drift appeared only in the model that could
 earn the reward.

@@ -332,7 +332,28 @@ Reading notes:
   answers from canonical-leaning to greedy (at matched length), the
   reward cannot see this, and string length determines the resulting
   non-canonical rate.
-- **Per-position canonicality** (added 2026-08-30, post-hoc):
+- **Exactly-2-token stratum** (added 2026-08-30, post-hoc; the
+  composition-free view of the policy flip — 1-token answers are
+  trivially canonical, so the aggregate table's canonical column moves
+  only when answers lengthen):
+
+  | step | % answers 2-tok (n) | digits | match canon | match greedy | tok nc |
+  |---:|---:|---:|---:|---:|---:|
+  | 0 | 24.2% (50) | 3.9 | 88.0% | 30.0% | 12.0% |
+  | 400 | 2.4% (5) | 6.6 | 20.0% | 100.0% | 80.0% |
+  | 800 | 2.9% (6) | 5.8 | 50.0% | 83.3% | 50.0% |
+  | 1200 | 6.7% (14) | 6.1 | 50.0% | 100.0% | 50.0% |
+  | 1600 | 49.0% (102) | 5.9 | 54.9% | 100.0% | 45.1% |
+  | 2000 | 56.7% (118) | 5.8 | 55.1% | 100.0% | 44.9% |
+
+  Within the stratum the policy is greedy from step 400 on (greedy match
+  100% at every later eval; canonical match ≈ the canonical-greedy
+  coincidence rate for the emitted strings); what changes late is the
+  stratum's share (2.4% → 56.7%). Matches are non-exclusive; mean digits
+  in the stratum is not constant (3.9 untrained vs 5.8–6.6 trained — the
+  greedy compression), so the canonical-match drop 88% → 55% partly
+  reflects string length; the greedy-match rise 30% → 100% is the
+  policy. n=5–14 mid-training.
   P(emitted answer token j == canonical token j) at step 2000 is 72.1% /
   53.1% / 30.0% for positions 1/2/3 (step 0: 97.1% / 90.6% / 100%;
   step 800: 98.6% at position 1) — a monotone positional gradient. Its
