@@ -360,8 +360,18 @@ mid-training single-token answer verbatim as the first token (the other 2
 corrected wrong digits), and every such first token is canonical for its
 own surface in isolation — the non-canonicality arises at the seam, where
 the canonical segmentation of the extended string re-chunks across the
-boundary (`011`+`33` re-encodes as `01`+`133`). Modal answers, single
-seed, post-hoc; details in `retok_rl/RESULTS.md`.
+boundary (`011`+`33` re-encodes as `01`+`133`). A length-conditioned
+control sharpens what RL did and didn't do: single-token answers are 0%
+non-canonical at every eval, and among multi-token answers the rate
+(9.4% untrained → 46.9% at the cap) tracks the tokenizer's own
+canonical-vs-greedy divergence for strings of the emitted length (~52%
+for 5-digit strings) — so the reward lengthened answers and the policy
+kept extending locked-in tokens, and the non-canonical rate at the seams
+is the tokenizer's geometry, not a segmentation preference the reward
+selected directly (it cannot see segmentation). The emitted form is
+never more tokens than canonical, and is strictly fewer in a third of
+multi-token answers. Modal answers, single seed, post-hoc; details in
+`retok_rl/RESULTS.md`.
 gpt2 (124M) at identical settings stayed ~99% canonical while failing the
 task (reward 0.97 → 1.44) — the drift appeared only in the model that could
 earn the reward.
