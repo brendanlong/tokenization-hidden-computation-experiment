@@ -368,7 +368,18 @@ Reading notes:
   the model's edge over a constant string on unseen divisors is <1
   digit. Together with the per-divisor lock-in check below, this
   quantifies the standing caveat that the run is 77 memorised
-  expansions, not division.
+  expansions, not division. The magnitude sense itself is **learned and
+  genuinely generalizes** rather than being pretrained knowledge:
+  untrained, held-out answers are junk with no magnitude structure
+  (reward 0.21; 31/168 digit runs start `0`; 1/96 of the n≥55 answers
+  start `01`; modal answers like `3210` for 1/6, `9995` for 1/25), while
+  by step 400 — trained only on the other 77 divisors — 168/168 held-out
+  answers start `0` and 96/96 of the n≥55 answers start `01` (reward
+  1.82). The shared answer shape (leading `0`/`01`, worth ~1.5 digits on
+  any divisor) is learned fast and transfers; the divisor-specific
+  digits accumulate slowly and do not. This completes by step 400,
+  coinciding with the first-token lock-in — the first token carries
+  both kinds of information.
 - **Per-position canonicality** (added 2026-08-30, post-hoc):
   P(emitted answer token j == canonical token j) at step 2000 is 72.1% /
   53.1% / 30.0% for positions 1/2/3 (step 0: 97.1% / 90.6% / 100%;
