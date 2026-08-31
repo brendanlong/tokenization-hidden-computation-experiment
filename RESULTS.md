@@ -1380,3 +1380,51 @@ merged → digit 0.2%/0.0% (cannot unpack merged operands); merged → merged
    replay positions is 55–62% vs the 50.9% base on both converged seeds,
    against 80–100% on the real CoT stream. The §1 probe collapse is a
    positional-structure result, not a distribution-shift artifact.
+
+## API re-measurement with explicit sampling params (2026-08-30)
+
+Re-ran the seven API-measured models with truncation pinned explicitly,
+per the pre-registration in EXPERIMENT_PLAN.md: OpenAI direct with
+`top_p=1.0` (the API has no top-k parameter); OpenRouter with `top_p=1.0,
+top_k=0` under `require_parameters`. Same 25 prompts, 4 samples,
+temperature 1.0, max 300 tokens. Artifacts: `data/retok/api_pinned/`
+(one deviation: no OpenRouter endpoint serves deepseek-chat-v3-0324 with
+`top_k` + logprobs, so that model ran `top_p=1.0` only, same provider as
+the original run).
+
+| model | original (defaults) | pinned | usable n (pinned) |
+|---|---:|---:|---:|
+| gpt-4o | 0.000% | 0.000% | 100 |
+| gpt-4o-mini | 0.008% | 0.051% | 100 |
+| gpt-4.1 | 0.009% | 0.000% | 100 |
+| gpt-4.1-mini | 0.014% | 0.010% | 100 |
+| DeepSeek-V3-0324 | 0.390% | 0.350% | 64 |
+| DeepSeek-V3.1 | 0.378% | 0.210% | 31 |
+| Qwen3-235B | 0.000% | 0.000% | 85 |
+
+Per-token pooled rates. Reading notes:
+
+- **Prediction 1 (OpenAI unchanged within noise): supported.** All four
+  moved within singleton-count noise (0–6 flagged generations per 100);
+  gpt-4o-mini's rise is 4 multi-space-run segmentations in arithmetic
+  outputs plus one Latin word.
+- **Prediction 2 (OpenRouter equal-or-higher; a Qwen3 rise would
+  indicate provider truncation): no rise anywhere.** Qwen3-235B stays at
+  zero non-canonical tokens with truncation explicitly disabled, across
+  a shifted provider mix (Parasail/Alibaba/AtlasCloud/Google vs
+  GMICloud-dominant originally). The provider-default-truncation
+  hypothesis for its zero is not supported; the standing zero-rate
+  ambiguity (provider-side canonicalization) remains. Both DeepSeek
+  models moved slightly *down* (0.390→0.350, 0.378→0.210); their
+  non-canonical spans keep the same character as the originals
+  (punctuation+newline seams, e.g. `).`+`\n\n` vs canonical `).\n\n`).
+- **Exclusions were the main cost of pinning.** DeepSeek-V3.1 was served
+  68/100 by CoreWeave, whose logprob bytes fail to reconstruct its own
+  message content (all 68 excluded as bytes-content-mismatch), leaving
+  n=31, essentially all Mara — the original run's provider.
+  V3-0324: 36/100 bytes-content-mismatch from GMICloud (the original run
+  excluded similarly). Qwen3: 15/100 excluded across four providers.
+- Net: the original "provider-default" rates were not materially
+  suppressed by sampling truncation; the lower-bound framing for API
+  rows can drop the truncation clause and keep the quantization /
+  canonicalization caveats.

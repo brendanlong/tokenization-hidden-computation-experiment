@@ -521,9 +521,11 @@ direct empirical answer to the first; §3 and §4 are partial ones to the second
   that has gone missing.
 - **Small N is the main statistical weakness.** A few hundred generations per
   cell, one seed, short completions; the API rows add frontier coverage but at
-  68–100 generations per model, under provider-default sampling truncation and
-  mixed quantization (both of which suppress tail tokens, so those rates are
-  conservative). The confident-flip
+  68–100 generations per model under mixed quantization (rates remain lower
+  bounds; a 2026-08-30 re-run with truncation pinned explicitly — `top_p=1`,
+  plus `top_k=0` where endpoints accept it — moved no model's rate
+  materially, so provider-default sampling truncation was not suppressing
+  them; see RESULTS.md "API re-measurement"). The confident-flip
   rate rests on a handful of events; we give raw counts and Wilson intervals
   rather than bare percentages, and the intervals are wide. Read the rates as
   order-of-magnitude. (An early Qwen reading of 0% at 0-of-64 did not survive
