@@ -438,6 +438,24 @@ LINEAGE_COLORS = {
     "oss": "#333333",
     "deepseek": "#D55E00",
 }
+# Measurement route: local weights unless listed here. Shape-encoded in the
+# overview so API-fidelity caveats (defaults, quantization, re-serialization
+# ambiguity) are visible per point.
+OVERVIEW_ROUTES = {
+    "gpt-4o": "openai",
+    "gpt-4o-mini": "openai",
+    "gpt-4.1": "openai",
+    "gpt-4.1-mini": "openai",
+    "DeepSeek-V3": "openrouter",
+    "DeepSeek-V3.1": "openrouter",
+    "Qwen3-235B": "openrouter",
+}
+ROUTE_MARKERS = {"local": "o", "openai": "s", "openrouter": "^"}
+ROUTE_LABELS = {
+    "local": "open weights, run locally",
+    "openai": "OpenAI API (logprobs)",
+    "openrouter": "OpenRouter (logprobs)",
+}
 # Within-lineage connections (tokenizer + recipe held roughly fixed).
 OVERVIEW_LINES = [
     ("llama", ["Llama-3.2-1B", "Llama-3.2-3B", "Llama-3.1-8B"]),
@@ -465,6 +483,7 @@ def plot_overview(out_path: Path) -> None:
         )
     for name, date, rate_, floor, lineage, dx, ym in OVERVIEW:
         colour = LINEAGE_COLORS[lineage]
+        marker = ROUTE_MARKERS[OVERVIEW_ROUTES.get(name, "local")]
         if floor is not None:  # zero observed: plot AT the detection floor
             ax.scatter(
                 date,
@@ -472,13 +491,13 @@ def plot_overview(out_path: Path) -> None:
                 s=70,
                 facecolors="none",
                 edgecolors=colour,
-                marker="v",
+                marker=marker,
                 linewidths=1.6,
                 zorder=3,
             )
             y = floor
         else:
-            ax.scatter(date, rate_, s=56, color=colour, zorder=3)
+            ax.scatter(date, rate_, s=56, color=colour, marker=marker, zorder=3)
             y = rate_
         ax.annotate(
             name,
@@ -499,10 +518,31 @@ def plot_overview(out_path: Path) -> None:
     ax.set_ylabel("emitted tokens that are non-canonical (log scale)")
     ax.set_title(
         "Non-canonical output, 2019 \u2192 2025: falling, but lineage-dependent\n"
-        "Same 25 prompts, temp 1.0, pooled per-token. Hollow \u25bd = zero "
+        "Same 25 prompts, temp 1.0, pooled per-token. Hollow marker = zero "
         "observed, plotted at the detection floor (1/tokens measured)",
         fontsize=10.5,
         loc="left",
+    )
+    from matplotlib.lines import Line2D
+
+    ax.legend(
+        handles=[
+            Line2D(
+                [],
+                [],
+                linestyle="none",
+                marker=ROUTE_MARKERS[r],
+                markersize=7,
+                markerfacecolor="#888888",
+                markeredgecolor="#555555",
+                label=ROUTE_LABELS[r],
+            )
+            for r in ("local", "openai", "openrouter")
+        ],
+        loc="lower left",
+        fontsize=8.2,
+        framealpha=0.92,
+        edgecolor="#dddddd",
     )
     ax.grid(True, which="both", color="#e8e8e6", linewidth=0.7, zorder=0)
     for sp in ("top", "right"):
