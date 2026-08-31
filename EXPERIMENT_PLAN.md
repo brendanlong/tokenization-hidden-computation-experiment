@@ -167,3 +167,27 @@ positional-structure probe result.
    position. This is the load-bearing prediction: if the probe now recovers
    the carry, the §1 "false negative for interpretability" claim was partly
    an artifact of distribution shift, and we will say so.
+
+## API re-measurement with explicit sampling params (pre-registered 2026-08-30, before the runs)
+
+The original API measurements sent only `temperature=1.0` and let each
+endpoint's defaults govern truncation (OpenAI documented default
+`top_p=1`, no top-k parameter; OpenRouter serving providers undocumented).
+Re-send the identical prompt set with truncation pinned explicitly:
+OpenAI with `top_p=1.0`; OpenRouter with `top_p=1.0, top_k=0` under
+`require_parameters`. Same 25 prompts, 4 samples, temperature 1.0,
+max 300 tokens; new artifacts alongside the originals (suffix `_pinned`),
+originals unchanged.
+
+**Predictions.**
+1. OpenAI models: rates unchanged within sampling noise (their default is
+   already nominally untruncated) — this arm is a robustness check, and a
+   material rise would indicate undocumented truncation.
+2. OpenRouter models: rates equal or higher than the original run —
+   explicit `top_p=1/top_k=0` can only widen the sampled distribution. A
+   rise for Qwen3-235B (0 observed originally) would indicate its serving
+   providers were applying model-card truncation defaults; DeepSeek
+   (already the modern outlier at ~0.4%) rising further would strengthen
+   the lineage reading.
+3. Either way the API rows remain lower bounds (unknown quantization,
+   provider-side canonicalization ambiguity for zero rates).
