@@ -1363,12 +1363,16 @@ eval's.)
    time. The 50/50 mixture exists across prompt encodings, not within one.
    The original 70/30 model remains the *uncued-mixture* demonstration;
    this variant cannot be one.
-**Addendum — full 2×2 format grid** (restricted argmax, 4,000 pairs;
-recomputable from the checkpoints): digit prompt → digit answer 100%/100%
-(s0/s1); digit prompt → merged answer 0.07%/0.07%; merged prompt → digit
-answer 0.2%/0.0%; merged prompt → merged answer 1.73%/0.40%. Exactly one
-cell works; the model cannot even unpack merged operands for digit-by-digit
-computation.
+**Addendum — behaviour grid** (sampled, temperature 1, text-scored on the
+decoded answer string, 2,000 pairs, `retok.sample_eval`): digit-operand
+prompts → 100% digit-by-digit output at 99.8% text accuracy (both seeds);
+merged-operand prompts → ~100% merged one-token output at **0.0%** text
+accuracy (0/2,000 correct, both seeds — consistent with the near-uniform
+sub-1% mass on the merged vocab). The prompt encoding fully determines the
+output format. **Capability grid** (restricted argmax, 4,000 pairs): digit
+prompt → digit answer 100%/100% (s0/s1); digit → merged 0.07%/0.07%;
+merged → digit 0.2%/0.0% (cannot unpack merged operands); merged → merged
+1.73%/0.40%. Exactly one cell works under either scoring.
 
 4. *Probe stays near chance on the in-distribution replay* — **holds**, and
    this was the load-bearing prediction: with "can't read this input"

@@ -36,24 +36,24 @@ decode step). Re-encoding a digit-token transcript produces exactly the
 merged encoding, token for token, so the stored-as-text version of the
 model's work *is* the second training format.
 
-Accuracy for every prompt-encoding × answer-format combination
-(restricted-argmax, 4,000 problems, seeds s0/s1 — recomputable from the
-published `retok-mergedops-s*` checkpoints):
+What the model does, sampled at temperature 1, with correctness scored on
+the **decoded answer text** (however it was tokenized; 2,000 problems ×
+seeds s0/s1, recomputable from the published `retok-mergedops-s*`
+checkpoints via `retok.sample_eval`):
 
-| prompt \ answer | digit-by-digit | merged one-token |
-|---|---:|---:|
-| digit operands | **100%** | 0.07% |
-| merged operands | 0.0–0.2% | 0.4–1.7% |
+| prompt encoding | observed output format | text accuracy |
+|---|---|---:|
+| digit operands | 100% digit-by-digit | **99.8%** |
+| merged operands | ~100% merged one-token | **0.0%** |
 
-**Exactly one cell works.** The model cannot produce the merged answer even
-from readable digits, cannot unpack merged operands to compute digit-by-digit,
-and scores ~1% on the all-merged encoding — *half of its own training data*.
-The computation lives entirely in the digit-token pathway. Sampled at
-temperature 1 the format is cued by the prompt encoding: on digit-operand
-prompts it answers digit-by-digit ~100% of the time at 99.8% accuracy. The
-transcript collapse: 13 emitted positions re-encode to 7, the three answer
-decode steps to one, and the model assigns the correct merged answer only
-**0.004–0.006** probability given the re-tokenized transcript.
+The prompt encoding fully determines the output format, and only the
+digit-token pathway computes. Forcing the crossed formats doesn't help
+(restricted argmax: merged answers from digit prompts 0.07%; digit-by-digit
+from merged prompts ≤0.2% — it cannot even unpack merged operands; merged
+from merged reaches only 0.4–1.7% even at argmax, on *half its own training
+data*). The transcript collapse: 13 emitted positions re-encode to 7, the
+three answer decode steps to one, and the model assigns the correct merged
+answer only **0.004–0.006** probability given the re-tokenized transcript.
 
 The model needs the extra decode steps. The stored transcript says it didn't —
 and the stored form is precisely the encoding in which the model can do
