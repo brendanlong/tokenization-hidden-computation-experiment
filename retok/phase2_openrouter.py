@@ -265,6 +265,9 @@ def main() -> None:
     p.add_argument("--out-dir", default="data/retok/api")
     p.add_argument("--prompt-set", choices=["default", "english-v2"], default="default")
     p.add_argument(
+        "--workers", type=int, default=6, help="concurrent requests per model"
+    )
+    p.add_argument(
         "--providers",
         nargs="*",
         default=None,
