@@ -360,6 +360,16 @@ Reading notes:
   step 2000 30% canonical, 60% greedy, 53.3% tokens non-canonical
   (n=10, 8.5 digits — the mixtures that match neither reference live in
   this stratum).
+- **Held-out reward is mostly magnitude heuristics** (added 2026-08-30,
+  post-hoc): held-out reward tracks train (0.21 → 2.28 vs 0.27 → 2.72 of
+  30 at step 2000), but a constant guess scores 1.52 (`01`) to 1.62
+  (`012` or `010`) on the 21 held-out divisors with no knowledge of the
+  problem — nearly all two-digit divisors' expansions start `01…` — so
+  the model's edge over a constant string on unseen divisors is <1
+  digit. Together with the per-divisor lock-in check below, this
+  quantifies the standing caveat that the run is 77 memorised
+  expansions, not division.
+- **Per-position canonicality** (added 2026-08-30, post-hoc):
   P(emitted answer token j == canonical token j) at step 2000 is 72.1% /
   53.1% / 30.0% for positions 1/2/3 (step 0: 97.1% / 90.6% / 100%;
   step 800: 98.6% at position 1) — a monotone positional gradient. Its
