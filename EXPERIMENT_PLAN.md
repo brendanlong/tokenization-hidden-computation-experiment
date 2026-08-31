@@ -191,3 +191,34 @@ originals unchanged.
    the lineage reading.
 3. Either way the API rows remain lower bounds (unknown quantization,
    provider-side canonicalization ambiguity for zero rates).
+
+## English-only v2 survey (plan written 2026-08-31, before any runs; plan author: Claude)
+
+The v1 survey's cross-model comparison is confounded by compliance: models
+do different things with the same prompt (small models answer non-English
+prompts in English; base models ramble), so pooled rates mix "how canonical
+is this model" with "what did it choose to write". v2 fixes the comparison
+by (a) English-only prompts (80, in 8 registers; `retok/phase2_english.py`),
+(b) a 1000-token cap, (c) a text-only Haiku judge grading
+instruction-following + coherence per generation (`retok/phase2_judge.py` —
+the judge sees decoded text only, so grading cannot leak the outcome
+variable), and (d) reporting BOTH raw and compliant-conditioned per-token
+rates, headline = compliant. Base models (gpt2, gemma-2-2b) additionally get
+a minimal Task:/Response: scaffold, recorded per generation. Open models run
+sequentially on one A100-80GB node (`skypilot/english-survey.yaml`); API
+models via the existing scripts with `--prompt-set english-v2`. All
+artifacts go to `english_v2/` locally and on the HF dataset.
+
+**Predictions.**
+1. Compliant-conditioned English rates are LOW for every instruct model —
+   ≤0.1% per token for everything 2024+ — and the cross-model spread
+   shrinks relative to the pooled v1 numbers (much of v1's spread was the
+   confused/noncompliant regime).
+2. GPT-2 (even scaffolded) has near-zero full-compliance; its rate is
+   reported but it likely drops out of the compliant headline. If the
+   scaffold gets it to ≥20% full compliance, that's a bonus, not expected.
+3. Raw rates exceed compliant rates for every model where they differ —
+   non-canonical tokens concentrate in noncompliant/incoherent output.
+   *Refuted if* any model's compliant rate materially exceeds its raw rate.
+4. DeepSeek remains a modern outlier on compliant English output (≥0.1%
+   per token) — the punctuation+newline seams appear in coherent text.

@@ -91,14 +91,21 @@ def measure(
     max_tokens: int,
     jsonl_out: Path | None,
     top_p: float | None = None,
+    prompt_set: str = "default",
 ) -> None:
+    if prompt_set == "english-v2":
+        from retok.phase2_english import ENGLISH_PROMPTS
+
+        prompt_dict = ENGLISH_PROMPTS
+    else:
+        prompt_dict = PROMPTS
     enc = tiktoken.encoding_for_model(model)
     agg: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0, 0])
     fidelity_failures = 0
     records: list[dict[str, object]] = []
     examples: list[str] = []
 
-    for domain, prompts in PROMPTS.items():
+    for domain, prompts in prompt_dict.items():
         for prompt in prompts:
             resp = _chat(model, prompt, n_samples, temperature, max_tokens, top_p)
             for choice in resp["choices"]:
@@ -154,6 +161,7 @@ def measure(
                         "prompt": prompt,
                         "temperature": temperature,
                         "top_p": top_p,
+                        "prompt_set": prompt_set,
                         "generated_ids": ids,
                         "canonical_ids": canon,
                         "text": content,
@@ -197,6 +205,7 @@ def main() -> None:
         help="send top_p explicitly (omitted from the request when unset)",
     )
     p.add_argument("--out-dir", default="data/retok/api")
+    p.add_argument("--prompt-set", choices=["default", "english-v2"], default="default")
     a = p.parse_args()
     for model in a.models:
         measure(
@@ -206,6 +215,7 @@ def main() -> None:
             a.max_tokens,
             Path(a.out_dir) / f"{model}.jsonl",
             top_p=a.top_p,
+            prompt_set=a.prompt_set,
         )
 
 

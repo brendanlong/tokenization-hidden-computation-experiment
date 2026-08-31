@@ -116,7 +116,14 @@ def measure(
     providers_pin: list[str] | None,
     top_p: float | None = None,
     top_k: int | None = None,
+    prompt_set: str = "default",
 ) -> None:
+    if prompt_set == "english-v2":
+        from retok.phase2_english import ENGLISH_PROMPTS
+
+        prompt_dict = ENGLISH_PROMPTS
+    else:
+        prompt_dict = PROMPTS
     tok = AutoTokenizer.from_pretrained(TOKENIZERS[model])
     agg: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0, 0])
     fidelity_failures: dict[str, int] = defaultdict(int)
@@ -124,7 +131,7 @@ def measure(
     records: list[dict[str, object]] = []
     examples: list[str] = []
 
-    for domain, prompts in PROMPTS.items():
+    for domain, prompts in prompt_dict.items():
         for prompt in prompts:
             for _ in range(n_samples):  # n>1 unsupported by some providers
                 resp = _chat(
@@ -195,6 +202,7 @@ def measure(
                         "prompt": prompt,
                         "temperature": temperature,
                         "top_p": top_p,
+                        "prompt_set": prompt_set,
                         "top_k": top_k,
                         "sampled_tokens": [
                             s.decode("utf-8", "replace") for s in sampled
@@ -236,6 +244,7 @@ def main() -> None:
     p.add_argument("--temperature", type=float, default=1.0)
     p.add_argument("--max-tokens", type=int, default=300)
     p.add_argument("--out-dir", default="data/retok/api")
+    p.add_argument("--prompt-set", choices=["default", "english-v2"], default="default")
     p.add_argument(
         "--providers",
         nargs="*",
@@ -266,6 +275,7 @@ def main() -> None:
             a.providers,
             top_p=a.top_p,
             top_k=a.top_k,
+            prompt_set=a.prompt_set,
         )
 
 

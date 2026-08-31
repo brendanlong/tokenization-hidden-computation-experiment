@@ -169,6 +169,8 @@ def probe(
     seed: int,
     dtype: str = "auto",
     jsonl_out: Path | None = None,
+    prompt_set: str = "default",
+    scaffold: bool = False,
 ) -> None:
     device = resolve_device(require_cuda=False)
     print(f"Loading {model_name} on {device} ...")
@@ -196,6 +198,16 @@ def probe(
     torch.manual_seed(seed)
 
     use_chat = tokenizer.chat_template is not None
+    if prompt_set == "english-v2":
+        from retok.phase2_english import ENGLISH_PROMPTS
+
+        prompt_dict = ENGLISH_PROMPTS
+    else:
+        prompt_dict = PROMPTS
+    # Base models (no chat template) optionally get a minimal completion
+    # scaffold so instruction-following is at least possible; recorded
+    # per-generation so compliant-rate analyses can condition on it.
+    use_scaffold = scaffold and not use_chat
     # domain -> dict of counters
     totals: dict[str, dict[str, int]] = {}
     examples: list[tuple[str, Span]] = []  # domain, differing span
@@ -207,7 +219,7 @@ def probe(
     records: list[dict[str, object]] = []
 
     n_excluded = 0
-    for domain, prompts in PROMPTS.items():
+    for domain, prompts in prompt_dict.items():
         n_noncanon = 0
         n_total = 0
         noncanon_tok = 0  # actual tokens inside a differing region
@@ -220,6 +232,10 @@ def probe(
                     tokenize=False,
                     add_generation_prompt=True,
                 )
+            elif use_scaffold:
+                from retok.phase2_english import BASE_SCAFFOLD
+
+                text = BASE_SCAFFOLD.format(prompt=prompt)
             else:
                 text = prompt
             enc = tokenizer(text, return_tensors="pt").to(device)
@@ -276,6 +292,9 @@ def probe(
                             "prompt": prompt,
                             "seed": seed,
                             "temperature": temperature,
+                            "prompt_set": prompt_set,
+                            "scaffold": use_scaffold,
+                            "max_new_tokens": max_new_tokens,
                             "excluded": True,
                             "exclude_reason": (
                                 "replacement_char"
@@ -297,6 +316,9 @@ def probe(
                         "prompt": prompt,
                         "seed": seed,
                         "temperature": temperature,
+                        "prompt_set": prompt_set,
+                        "scaffold": use_scaffold,
+                        "max_new_tokens": max_new_tokens,
                         "excluded": False,
                         "non_canonical": bool(spans),
                         # the whole point: what the model ACTUALLY emitted...
@@ -384,6 +406,20 @@ def main() -> None:
     parser.add_argument("--temperature", type=float, default=0.8)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument(
+        "--prompt-set",
+        choices=["default", "english-v2"],
+        default="default",
+        help="'english-v2' = the 80-prompt English-only set (phase2_english.py)",
+    )
+    parser.add_argument(
+        "--scaffold",
+        action="store_true",
+        help=(
+            "For models with no chat template, wrap the prompt in a minimal "
+            "Task:/Response: completion scaffold (recorded per generation)."
+        ),
+    )
+    parser.add_argument(
         "--dtype",
         default="auto",
         help=(
@@ -410,6 +446,8 @@ def main() -> None:
         seed=args.seed,
         dtype=args.dtype,
         jsonl_out=Path(args.jsonl_out) if args.jsonl_out else None,
+        prompt_set=args.prompt_set,
+        scaffold=args.scaffold,
     )
 
 
