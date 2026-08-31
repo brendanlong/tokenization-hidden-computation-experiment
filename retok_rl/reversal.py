@@ -625,6 +625,7 @@ def summarise_reversal(
         "roundtrip/tok_non_canonical": tok_bad / max(1, tok_total),
         "roundtrip/answer_non_canonical": ans_nc / max(1, ans_n),
         "roundtrip/answer_tok_non_canonical": ans_tok_bad / max(1, ans_tok_total),
+        "mean_answer_tokens": ans_tok_total / max(1, ans_n),
         "roundtrip/excluded": excluded / n,
         "n_compliant": float(sum(attractors.values())),
         "correct_region/frac_single_char": cr_single / max(1, cr_total),

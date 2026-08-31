@@ -297,18 +297,20 @@ retained artifacts to recompute the non-exclusive form) — same direction,
 somewhat further; treat the difference as run-to-run spread. Both in
 `retok_rl/RESULTS.md`.
 
-| GRPO step | digits per answer | % answers matching canonical | % matching greedy-longest | % matching all-single-digit | % answer tokens non-canonical |
-|---:|---:|---:|---:|---:|---:|
-| 0 | 3.0 | 97.1% | 76.8% | 6.8% | 4.1% |
-| 400 | 3.1 | 98.1% | 100.0% | 0.0% | 3.8% |
-| 800 | 3.1 | 98.6% | 99.5% | 0.0% | 2.8% |
-| 1200 | 3.2 | 96.2% | 100.0% | 0.0% | 7.1% |
-| 1600 | 4.6 | 76.0% | 99.5% | 0.0% | 31.1% |
-| 2000 | 4.9 | **71.2%** | **98.1%** | 0.0% | **35.3%** |
+| GRPO step | digits per answer | tokens per answer | % answers matching canonical | % matching greedy-longest | % matching all-single-digit | % answer tokens non-canonical |
+|---:|---:|---:|---:|---:|---:|---:|
+| 0 | 3.0 | 1.43 | 97.1% | 76.8% | 6.8% | 4.1% |
+| 400 | 3.1 | 1.02 | 98.1% | 100.0% | 0.0% | 3.8% |
+| 800 | 3.1 | 1.03 | 98.6% | 99.5% | 0.0% | 2.8% |
+| 1200 | 3.2 | 1.08 | 96.2% | 100.0% | 0.0% | 7.1% |
+| 1600 | 4.6 | 1.56 | 76.0% | 99.5% | 0.0% | 31.1% |
+| 2000 | 4.9 | 1.66 | **71.2%** | **98.1%** | 0.0% | **35.3%** |
 
-<sub>The three "% answers matching" columns compare the emitted digit run —
-right or wrong — against each reference segmentation of its own surface
-independently. They are **non-exclusive and do not sum to 100%**: a run can
+<sub>"Tokens per answer" is the mean token count of the emitted digit run —
+mid-training the whole answer is a single token, and at the cap 1.66 tokens
+carry 4.9 digits. The three "% answers matching" columns compare the
+emitted digit run — right or wrong — against each reference segmentation
+of its own surface independently. They are **non-exclusive and do not sum to 100%**: a run can
 match several references, and canonical == greedy-longest for most short
 digit strings (~98% of emitted surfaces mid-training, 69% at step 2000).
 "% answer tokens non-canonical" round-trips the digit run alone

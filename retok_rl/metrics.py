@@ -238,6 +238,7 @@ def summarise(
         "roundtrip/tok_non_canonical": tok_bad / max(1, tok_total),
         "roundtrip/digitrun_non_canonical": run_nc / max(1, run_n),
         "roundtrip/digitrun_tok_non_canonical": run_tok_bad / max(1, run_tok_total),
+        "mean_digitrun_tokens": run_tok_total / max(1, run_n),
         "roundtrip/excluded": excluded / n,
         "correct_region/frac_single_digit": cr_single / max(1, cr_total),
         "correct_region/non_canonical": cr_nc / max(1, cr_n),

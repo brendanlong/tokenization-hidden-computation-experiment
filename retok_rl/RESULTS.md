@@ -248,6 +248,7 @@ All numbers below recompute from `rollouts.jsonl` via `metrics.summarise`.
 |---|---:|---:|---:|---:|---:|---:|
 | reward (correct leading digits of 30) | 0.27 | 1.57 | 2.28 | 2.48 | 2.74 | 2.72 |
 | digits emitted (mean) | 3.0 | 3.1 | 3.1 | 3.2 | 4.6 | 4.9 |
+| digit-run tokens (mean) | 1.43 | 1.02 | 1.03 | 1.08 | 1.56 | 1.66 |
 | canonical attractor (emitted digit run, right or wrong) | 89.9% | 98.1% | 98.6% | 96.2% | 76.0% | **71.2%** |
 | greedy-longest attractor | 0.5% | 1.9% | 1.4% | 3.8% | 23.6% | **27.9%** |
 | all-single-digit attractor | 6.7% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
@@ -287,7 +288,9 @@ Reading notes:
   greedy-longest 94–100% of the time from step 400 on (n=4–62 per eval),
   vs 97.7% canonical untrained (n=44).
 - The **digit-run rows** (added 2026-08-30;
-  `roundtrip/digitrun_tok_non_canonical` in `metrics.py`) round-trip the
+  `roundtrip/digitrun_tok_non_canonical` and `mean_digitrun_tokens` in
+  `metrics.py`; the reversal analogues are `answer_tok_non_canonical` and
+  `mean_answer_tokens`) round-trip the
   emitted digit run alone — `encode(decode(kept_ids))` vs `kept_ids`, diff
   tokens over run tokens — so the answer region is measured by itself
   rather than diluted across the ~38-token completion (at step 2000 the
