@@ -452,7 +452,7 @@ OVERVIEW_ROUTES = {
 }
 ROUTE_MARKERS = {"local": "o", "openai": "s", "openrouter": "^"}
 ROUTE_LABELS = {
-    "local": "open weights, run locally",
+    "local": "open weights, run by us (local or rented GPU)",
     "openai": "OpenAI API (logprobs)",
     "openrouter": "OpenRouter (logprobs)",
 }
