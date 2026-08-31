@@ -58,7 +58,9 @@ def main() -> None:
             compliant = []
             for i, r in measurable:
                 v = verdicts.get(i, {})
-                if "error" in v or "skipped" in v:
+                if "followed" not in v:
+                    # missing, errored, or skipped verdict: ungraded, and
+                    # never counted as compliant
                     mix["ungraded"] += 1
                     continue
                 key = v["followed"] + ("" if v["coherent"] else "/incoherent")
