@@ -29,6 +29,12 @@
 > correct numbers; the headline induction results (38/41, 6/8, the controls,
 > and the pooled Fisher test) recompute exactly.
 >
+> **Hardware erratum (annotation, 2026-08-30 — log body still verbatim).**
+> Everywhere the log body says "RTX 3060" the physical card is an **RTX 3060
+> Ti (8 GB)**. The misnomer came from the workstation's environment config
+> (a plain RTX 3060 is a 12 GB card and was never present); it affects no
+> number, only the hardware name.
+>
 > **Further errata (annotation, 2026-08-24, from a full independent
 > re-verification of every quoted number against the published artifacts —
 > log body still verbatim):**
