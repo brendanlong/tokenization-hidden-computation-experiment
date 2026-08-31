@@ -18,10 +18,11 @@ adversary required.
 ## Findings
 
 1. **Non-canonical tokenization can hide computation.** A 2-layer, width-16
-   transformer trained on 3-digit reversed addition answers correctly **99.9%**
-   of the time digit-by-digit (3 tokens) but only **1.3%** as a single merged
-   token — and re-tokenizing its digit-by-digit transcript produces exactly that
-   merged token. The stored transcript shows it doing in one decode step what it
+   transformer trained on two encodings of 3-digit reversed addition — all
+   digit tokens, and the all-merged canonical encoding — can only do the
+   arithmetic digit-by-digit: **100%** accuracy there vs **≤2%** for every
+   format touching merged tokens, including the all-merged encoding that is
+   half its training data and that re-tokenizing its transcript produces. The stored transcript shows it doing in one decode step what it
    actually needed three for. Even absent any hidden computation, the round trip
    perturbs interpretability: next-token distributions at a non-canonical span
    boundary diverge (median KL 0.39, top-1 flips 50%), decaying ~78× within 16
@@ -44,17 +45,22 @@ adversary required.
    completely. On six API-measurable frontier models the same probe gets 97–100%
    compliance and **0 induced of 346** compliant productions.
 
-4. **RL drift off canonical is real but task- and lineage-dependent (two
-   pre-registered arms).** GRPO on gpt2-large, rewarding correct digits of the
-   *decoded* text (RLVR-style, blind to tokenization), took canonical from
-   100% to **61.5%** of rollouts in 2,000 steps — mostly reward-dense
-   greedy-longest chunks (37.5%), with all-single-digit rising late to 1.6%.
-   But the same pressure on a modern model (Qwen2.5-3B, word reversal — the
-   task where per-character emission genuinely pays) **did not support the
-   pre-registered compute-attractor prediction**: reward roughly doubled
-   while single-character token usage *fell* 20% → 10% (a transient rise to
-   9.5% of rollouts decayed as a correct-prefix-plus-junk reward hack took
-   over). A null with pre-registered caveats. See [`retok_rl/`](retok_rl/).
+4. **Two pre-registered RL arms under a tokenization-blind reward (pilot).**
+   GRPO on gpt2-large (decimal expansion, reward = correct digits of the
+   *decoded* text, artifact-backed replication): the emitted digit run
+   matches greedy-longest segmentation ~100% of answers from step 400 on,
+   while its canonical match falls 97% → **71%** as answers lengthen and
+   the two references diverge; **35.3%** of answer tokens are non-canonical
+   at the cap (4.1% untrained). Single-digit forms vanish immediately and
+   the all-single-digit attractor stays 0%. GRPO on Qwen2.5-3B (word
+   reversal, artifact-backed): reward roughly doubled while segmentation
+   stayed put — answer-run per-token canonicality flat (6.1% → 5.2%),
+   all-single-char 0% of correct answers throughout, single-char token
+   share 20% → 10%. The pre-registered
+   compute-attractor prediction was not supported (with pre-registered
+   caveats: final reward sits in the plan's weak-evidence band, and the
+   prefix-only reward concentrated pressure on ~2 characters). See
+   [`retok_rl/`](retok_rl/).
 
 ![All 17 models, 2019–2025: falling but lineage-dependent](figures/phase2_overview.png)
 

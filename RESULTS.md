@@ -29,6 +29,12 @@
 > correct numbers; the headline induction results (38/41, 6/8, the controls,
 > and the pooled Fisher test) recompute exactly.
 >
+> **Hardware erratum (annotation, 2026-08-30 — log body still verbatim).**
+> Everywhere the log body says "RTX 3060" the physical card is an **RTX 3060
+> Ti (8 GB)**. The misnomer came from the workstation's environment config
+> (a plain RTX 3060 is a 12 GB card and was never present); it affects no
+> number, only the hardware name.
+>
 > **Further errata (annotation, 2026-08-24, from a full independent
 > re-verification of every quoted number against the published artifacts —
 > log body still verbatim):**
@@ -70,6 +76,12 @@
 >   producing script was also not committed; its numbers re-derive from the
 >   published checkpoints to within 0.02pp (restricted argmax 1.29% vs 1.27%
 >   quoted).
+> - **Sampled-accuracy measurement added (2026-08-30, `retok.sample_eval`,
+>   from the published checkpoints):** at temperature 1 the headline model
+>   emits digit-by-digit 71.0–71.5% of samples (98.0–99.2% accurate) and the
+>   merged token 28.4–28.8% (0.69–1.05% accurate), overall ~71%; malformed
+>   ≤0.1%. The Phase-1 table's 99.9%/1.3% are per-format *argmax*
+>   accuracies; the writeup now leads with the sampled numbers.
 
 
 **Question.** Can a model's actual token stream differ from the canonical
@@ -1317,3 +1329,108 @@ RUN_NAME=retok-sweep-2L ./train.sh local retok -- --n-layers 2 --generate-n 8000
 - Result: CoT mean __%; direct mean __%; per chain_len {0:__, 1:__, 2:__, 3:__};
   direct P(correct) per chain_len {…}
 -->
+
+## Merged-operands variant (2026-08-30 — pre-registered in EXPERIMENT_PLAN.md before training)
+
+Three seeds on the local RTX 3060, `direct_fraction=0.5`, `--merged-operands`
+(DIRECT-format operands encoded as merged tokens, making the fully
+re-tokenized CoT transcript an in-distribution training format), 30M
+examples; wandb `retok-mergedops-s{0,1,2}`, checkpoints under
+`data/retok/checkpoints/retok-mergedops-s*/` (first attempt overwrote a
+shared `final.pt` — s0/s1 retrained; `train.py` now saves under a per-run
+subdirectory matching the published layout).
+
+| | s0 | s1 | s2 |
+|---|---:|---:|---:|
+| CoT accuracy (training eval) | 100% | 100% | 71.8% |
+| direct accuracy (merged-operand eval) | 2.45% | 0.83% | 1.33% |
+| sampled mix, digit-operand prompt (digit / merged) | 100% / 0% | 100% / 0% | 99.8% / 0.2% |
+| carry into digit 1: CoT / digit-replay / **re-tok replay** | 80.4 / 98.2 / **55.4%** | 82.6 / 98.5 / **55.2%** | (undertrained) |
+| carry into digit 2: CoT / digit-replay / **re-tok replay** | 94.0 / 90.0 / **62.3%** | 89.9 / 67.2 / **58.8%** | — |
+| P(correct merged answer given re-tokenized prompt) | 0.0064 | 0.0039 | — |
+
+(Probe base rate 50.9%. `retok.analysis`'s "direct" accuracy and
+"digit-operand replay" rows use digit-operand encoding, which for THIS
+model is the off-distribution variant — the roles are reversed relative to
+the headline model; the in-distribution direct number is the training
+eval's.)
+
+**Prediction status** (see the plan section for the full statements):
+
+1. *CoT ≳99% at 30M*: holds for s0/s1 (100%); **violated by s2** (71.8%,
+   degrading with carry-chain length — the undertraining signature; at the
+   50/50 split the digit branch gets 15M examples, evidently near the
+   convergence boundary for some seeds).
+2. *Direct ≪ CoT*: holds — 0.8–2.5% with readable merged operands.
+3. *Sampled mix ≈ 50/50*: **refuted, for a structural reason we failed to
+   anticipate.** Merged operands make the format cued: the prompt encoding
+   (digit vs merged operands) reveals the answer format, so on
+   digit-operand prompts the model answers digit-by-digit ~100% of the
+   time. The 50/50 mixture exists across prompt encodings, not within one.
+   The original 70/30 model remains the *uncued-mixture* demonstration;
+   this variant cannot be one.
+**Addendum — behaviour grid** (sampled, temperature 1, text-scored on the
+decoded answer string, 2,000 pairs, `retok.sample_eval`): digit-operand
+prompts → 100% digit-by-digit output at 99.8% text accuracy (both seeds);
+merged-operand prompts → ~100% merged one-token output at **0.0%** text
+accuracy (0/2,000 correct, both seeds — consistent with the near-uniform
+sub-1% mass on the merged vocab). The prompt encoding fully determines the
+output format. **Capability grid** (restricted argmax, 4,000 pairs): digit
+prompt → digit answer 100%/100% (s0/s1); digit → merged 0.07%/0.07%;
+merged → digit 0.2%/0.0% (cannot unpack merged operands); merged → merged
+1.73%/0.40%. Exactly one cell works under either scoring.
+
+4. *Probe stays near chance on the in-distribution replay* — **holds**, and
+   this was the load-bearing prediction: with "can't read this input"
+   eliminated (the replay is now a trained format), carry recovery at the
+   replay positions is 55–62% vs the 50.9% base on both converged seeds,
+   against 80–100% on the real CoT stream. The §1 probe collapse is a
+   positional-structure result, not a distribution-shift artifact.
+
+## API re-measurement with explicit sampling params (2026-08-30)
+
+Re-ran the seven API-measured models with truncation pinned explicitly,
+per the pre-registration in EXPERIMENT_PLAN.md: OpenAI direct with
+`top_p=1.0` (the API has no top-k parameter); OpenRouter with `top_p=1.0,
+top_k=0` under `require_parameters`. Same 25 prompts, 4 samples,
+temperature 1.0, max 300 tokens. Artifacts: `data/retok/api_pinned/`
+(one deviation: no OpenRouter endpoint serves deepseek-chat-v3-0324 with
+`top_k` + logprobs, so that model ran `top_p=1.0` only, same provider as
+the original run).
+
+| model | original (defaults) | pinned | usable n (pinned) |
+|---|---:|---:|---:|
+| gpt-4o | 0.000% | 0.000% | 100 |
+| gpt-4o-mini | 0.008% | 0.051% | 100 |
+| gpt-4.1 | 0.009% | 0.000% | 100 |
+| gpt-4.1-mini | 0.014% | 0.010% | 100 |
+| DeepSeek-V3-0324 | 0.390% | 0.350% | 64 |
+| DeepSeek-V3.1 | 0.378% | 0.210% | 31 |
+| Qwen3-235B | 0.000% | 0.000% | 85 |
+
+Per-token pooled rates. Reading notes:
+
+- **Prediction 1 (OpenAI unchanged within noise): supported.** All four
+  moved within singleton-count noise (0–6 flagged generations per 100);
+  gpt-4o-mini's rise is 4 multi-space-run segmentations in arithmetic
+  outputs plus one Latin word.
+- **Prediction 2 (OpenRouter equal-or-higher; a Qwen3 rise would
+  indicate provider truncation): no rise anywhere.** Qwen3-235B stays at
+  zero non-canonical tokens with truncation explicitly disabled, across
+  a shifted provider mix (Parasail/Alibaba/AtlasCloud/Google vs
+  GMICloud-dominant originally). The provider-default-truncation
+  hypothesis for its zero is not supported; the standing zero-rate
+  ambiguity (provider-side canonicalization) remains. Both DeepSeek
+  models moved slightly *down* (0.390→0.350, 0.378→0.210); their
+  non-canonical spans keep the same character as the originals
+  (punctuation+newline seams, e.g. `).`+`\n\n` vs canonical `).\n\n`).
+- **Exclusions were the main cost of pinning.** DeepSeek-V3.1 was served
+  68/100 by CoreWeave, whose logprob bytes fail to reconstruct its own
+  message content (all 68 excluded as bytes-content-mismatch), leaving
+  n=31, essentially all Mara — the original run's provider.
+  V3-0324: 36/100 bytes-content-mismatch from GMICloud (the original run
+  excluded similarly). Qwen3: 15/100 excluded across four providers.
+- Net: the original "provider-default" rates were not materially
+  suppressed by sampling truncation; the lower-bound framing for API
+  rows can drop the truncation clause and keep the quantization /
+  canonicalization caveats.

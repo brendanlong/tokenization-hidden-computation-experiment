@@ -7,10 +7,13 @@ reward-dense *greedy-longest* chunks (37.5%), with the single-digit
 (compute-buying) form rising late and small (0 → 1.6%). Reversal arm (Arm C,
 single seed, Qwen2.5-3B-Instruct, artifact-backed): the pre-registered
 compute-attractor prediction was **not supported** — reward roughly doubled
-while single-char token usage fell 20% → 10% (a transient rise to 9.5% of
-rollouts at step 150 decayed as a prefix+junk reward hack took over); the
-canonical decline that did occur tracks non-compliance (junk suffixes,
-uppercase), not segmentation drift. A null with pre-registered caveats.
+while segmentation stayed put: per-token round-trip canonicality flat
+(6.7% → 4.8%), all-single-char 0% of compliant answers at every eval,
+single-char token share 20% → 10%. Pre-registered caveats apply (final
+reward in the plan's weak-evidence band; the prefix-only reward put
+selection pressure on ~2 characters). See the Run 5 metric-correction note
+in RESULTS.md — segmentation is measured by round-trip canonicality, and
+wrong-but-canonically-tokenized text counts as canonical.
 See [EXPERIMENT_PLAN.md](EXPERIMENT_PLAN.md) for the pre-registered predictions.
 
 Follow-up to [`retok`](../retok/), which established that re-tokenized

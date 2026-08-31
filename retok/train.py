@@ -48,6 +48,12 @@ def main() -> None:
         ),
     )
     parser.add_argument("--direct-fraction", type=float, default=0.3)
+    parser.add_argument(
+        "--merged-operands",
+        action="store_true",
+        help="encode DIRECT-format operands as merged tokens (the fully "
+        "re-tokenized transcript becomes in-distribution)",
+    )
     parser.add_argument("--generate-n", type=int, default=20_000_000)
     # Model
     parser.add_argument("--dim", type=int, default=16)
@@ -85,6 +91,7 @@ def main() -> None:
         mode=args.mode,
         include_merged=not args.no_merged,
         direct_fraction=args.direct_fraction,
+        merged_operands=args.merged_operands,
         generate_n=args.generate_n,
         dim=args.dim,
         n_heads=args.n_heads,
@@ -144,6 +151,7 @@ def main() -> None:
         mode=config.mode,
         seed=config.seed + 100,
         tokenizer=tok,
+        merged_operands=config.merged_operands,
     )
     train_loader = DataLoader(
         dataset,
@@ -180,13 +188,17 @@ def main() -> None:
         eval_every_steps=config.eval_every_steps,
         seed=config.seed,
         run_name=run_name,
-        checkpoint_dir=Path(config.checkpoint_dir),
+        # Per-run subdirectory, matching the published hf:checkpoints/<run>/
+        # layout. (The flat layout let three seeds overwrite one final.pt,
+        # 2026-08-30.)
+        checkpoint_dir=Path(config.checkpoint_dir) / run_name,
         use_wandb=config.use_wandb,
         wandb_project=config.wandb_project,
         wandb_config={
             "model": model_config.model_dump(),
             "training": config.model_dump(),
         },
+        merged_operands=config.merged_operands,
     )
 
     print("\n=== Final Evaluation ===")

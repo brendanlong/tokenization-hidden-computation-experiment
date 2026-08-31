@@ -59,6 +59,8 @@ def _chat(
     temperature: float,
     max_tokens: int,
     providers: list[str] | None,
+    top_p: float | None = None,
+    top_k: int | None = None,
 ) -> dict:
     payload = {
         "model": model,
@@ -73,6 +75,10 @@ def _chat(
             else {"require_parameters": True}
         ),
     }
+    if top_p is not None:
+        payload["top_p"] = top_p
+    if top_k is not None:
+        payload["top_k"] = top_k
     req = urllib.request.Request(
         "https://openrouter.ai/api/v1/chat/completions",
         headers={
@@ -108,6 +114,8 @@ def measure(
     max_tokens: int,
     jsonl_out: Path | None,
     providers_pin: list[str] | None,
+    top_p: float | None = None,
+    top_k: int | None = None,
 ) -> None:
     tok = AutoTokenizer.from_pretrained(TOKENIZERS[model])
     agg: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0, 0])
@@ -119,8 +127,16 @@ def measure(
     for domain, prompts in PROMPTS.items():
         for prompt in prompts:
             for _ in range(n_samples):  # n>1 unsupported by some providers
-                resp = _chat(model, prompt, temperature, max_tokens, providers_pin)
+                resp = _chat(
+                    model, prompt, temperature, max_tokens, providers_pin, top_p, top_k
+                )
                 providers[resp.get("provider", "?")] += 1
+                if not resp.get("choices"):
+                    # error payload (rate limit, provider fault) delivered
+                    # with HTTP 200 — count and move on
+                    err = str(resp.get("error", {}).get("message", "?"))[:60]
+                    fidelity_failures[f"no-choices:{err}"] += 1
+                    continue
                 choice = resp["choices"][0]
                 content = choice["message"]["content"] or ""
                 lp = (choice.get("logprobs") or {}).get("content") or []
@@ -178,6 +194,8 @@ def measure(
                         "domain": domain,
                         "prompt": prompt,
                         "temperature": temperature,
+                        "top_p": top_p,
+                        "top_k": top_k,
                         "sampled_tokens": [
                             s.decode("utf-8", "replace") for s in sampled
                         ],
@@ -224,6 +242,18 @@ def main() -> None:
         default=None,
         help="Pin serving providers (skip ones that fail fidelity checks)",
     )
+    p.add_argument(
+        "--top-p",
+        type=float,
+        default=None,
+        help="send top_p explicitly (omitted from the request when unset)",
+    )
+    p.add_argument(
+        "--top-k",
+        type=int,
+        default=None,
+        help="send top_k explicitly (0 disables truncation; omitted when unset)",
+    )
     a = p.parse_args()
     for model in a.models:
         safe = model.replace("/", "_")
@@ -234,6 +264,8 @@ def main() -> None:
             a.max_tokens,
             Path(a.out_dir) / f"{safe}.jsonl",
             a.providers,
+            top_p=a.top_p,
+            top_k=a.top_k,
         )
 
 

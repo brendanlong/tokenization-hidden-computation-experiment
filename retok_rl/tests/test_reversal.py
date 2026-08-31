@@ -103,6 +103,27 @@ def test_summarise_reversal_correctness_metrics(tok: PreTrainedTokenizerBase) ->
     assert stats["mean_reward"] == pytest.approx(3 / 3)  # 3 + 0 + 0 over 3
     assert stats["exact_match"] == pytest.approx(1 / 3)
     assert stats["attempted"] == pytest.approx(2 / 3)
-    assert stats["attractor/empty"] == pytest.approx(1 / 3)
+    assert stats["empty"] == pytest.approx(1 / 3)
     assert 0.0 <= stats["letter_overlap"] <= 1.0
     assert stats["frac_single_char_tokens"] >= 0.0
+    # both emissions are canonical encodings of their own text: wrong text is
+    # just wrong — it must not register as non-canonical tokenization
+    assert stats["roundtrip/gen_non_canonical"] == 0.0
+    assert stats["roundtrip/tok_non_canonical"] == 0.0
+    # segmentation-of-answer is computed over the compliant rollout only
+    assert stats["n_compliant"] == 1.0
+    assert stats["attractor_compliant/canonical"] == pytest.approx(1.0)
+
+
+def test_summarise_reversal_roundtrip_flags_non_canonical(
+    tok: PreTrainedTokenizerBase,
+) -> None:
+    target = "tac"
+    # emit the correct answer one letter per token — non-canonical for gpt2
+    single_ids = [t for c in "tac" for t in tok.encode(c, add_special_tokens=False)]
+    assert len(single_ids) == 3
+    stats = summarise_reversal(tok, [(single_ids, target)])
+    assert stats["exact_match"] == 1.0
+    assert stats["roundtrip/gen_non_canonical"] == 1.0
+    assert stats["roundtrip/answer_non_canonical"] == 1.0
+    assert stats["attractor_compliant/all-single-char"] == pytest.approx(1.0)

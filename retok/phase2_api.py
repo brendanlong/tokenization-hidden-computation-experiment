@@ -46,7 +46,14 @@ import tiktoken
 from retok.phase2_probe import PROMPTS
 
 
-def _chat(model: str, prompt: str, n: int, temperature: float, max_tokens: int) -> dict:
+def _chat(
+    model: str,
+    prompt: str,
+    n: int,
+    temperature: float,
+    max_tokens: int,
+    top_p: float | None = None,
+) -> dict:
     payload = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
@@ -55,6 +62,8 @@ def _chat(model: str, prompt: str, n: int, temperature: float, max_tokens: int) 
         "max_completion_tokens": max_tokens,
         "logprobs": True,
     }
+    if top_p is not None:
+        payload["top_p"] = top_p
     req = urllib.request.Request(
         "https://api.openai.com/v1/chat/completions",
         headers={
@@ -81,6 +90,7 @@ def measure(
     temperature: float,
     max_tokens: int,
     jsonl_out: Path | None,
+    top_p: float | None = None,
 ) -> None:
     enc = tiktoken.encoding_for_model(model)
     agg: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0, 0])
@@ -90,7 +100,7 @@ def measure(
 
     for domain, prompts in PROMPTS.items():
         for prompt in prompts:
-            resp = _chat(model, prompt, n_samples, temperature, max_tokens)
+            resp = _chat(model, prompt, n_samples, temperature, max_tokens, top_p)
             for choice in resp["choices"]:
                 content = choice["message"]["content"] or ""
                 lp = (choice.get("logprobs") or {}).get("content") or []
@@ -143,6 +153,7 @@ def measure(
                         "domain": domain,
                         "prompt": prompt,
                         "temperature": temperature,
+                        "top_p": top_p,
                         "generated_ids": ids,
                         "canonical_ids": canon,
                         "text": content,
@@ -179,6 +190,12 @@ def main() -> None:
     p.add_argument("--n-samples", type=int, default=4)
     p.add_argument("--temperature", type=float, default=1.0)
     p.add_argument("--max-tokens", type=int, default=300)
+    p.add_argument(
+        "--top-p",
+        type=float,
+        default=None,
+        help="send top_p explicitly (omitted from the request when unset)",
+    )
     p.add_argument("--out-dir", default="data/retok/api")
     a = p.parse_args()
     for model in a.models:
@@ -188,6 +205,7 @@ def main() -> None:
             a.temperature,
             a.max_tokens,
             Path(a.out_dir) / f"{model}.jsonl",
+            top_p=a.top_p,
         )
 
 

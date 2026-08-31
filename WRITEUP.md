@@ -27,35 +27,55 @@ what actually ran.
 ## 1. It can hide computation — and it perturbs interpretability either way
 
 To show the strong version you need a case where the multi-step computation is
-real and measurable. A 2-layer, width-16 transformer trained from scratch on
-3-digit reversed addition emits its answer in an **uncued mixture**: usually
-digit-by-digit (3 tokens), sometimes as a single "merged" answer token.
+real and measurable. A 2-layer, width-16 transformer (~25k params) is trained
+from scratch on 3-digit reversed addition, on a 50/50 mixture of two
+encodings of the same problems: **all digit tokens** (`7 5 0 + 8 6 0 = 5 2 1`
+— three answer digits, three decode steps) and **all merged tokens**
+(`[750] + [860] = [521]` — the canonical encoding, one answer token, one
+decode step). Re-encoding a digit-token transcript produces exactly the
+merged encoding, token for token, so the stored-as-text version of the
+model's work *is* the second training format.
 
-| | |
-|---|---|
-| accuracy emitting the answer digit-by-digit | **99.9%** |
-| accuracy emitting it as one token, *given it takes that branch* | **1.3%** |
-| how often it *prefers* the one-token form (full-vocab argmax) | **0%** |
-| probability it assigns the correct one-token answer | **0.003** |
-| decode positions: actual → re-tokenized | **3 → 1** (whole transcript 13 → 7) |
-| probability of the answer given the *re-tokenized* transcript | **0.0003–0.0007** (per seed) |
+What the model does, sampled at temperature 1, with correctness scored on
+the **decoded answer text** (however it was tokenized; 2,000 problems ×
+seeds s0/s1, recomputable from the published `retok-mergedops-s*`
+checkpoints via `retok.sample_eval`):
 
-<sub>The two middle rows are conditioned differently, which is worth stating
-because they look inconsistent otherwise. The 1.3% is an argmax *restricted to
-the merged-token subspace* — "if it goes down the one-token branch, does it pick
-the right one?" The 0.003 is *unconditional*, diluted by the ~71% of probability
-mass sitting on the digit branch. Conditional on the merged branch the model
-gives the correct token 0.9%, which is what wins a 1000-way argmax ~1.3% of the
-time; 0.0027 ÷ 0.289 = 0.009 reconciles them. The unconditional number is the one
-the detector below needs, since it asks how likely the transcript is *as a
-one-step generation*.</sub>
+| prompt encoding | observed output format | text accuracy |
+|---|---|---:|
+| digit operands | 100% digit-by-digit | **99.8%** |
+| merged operands | ~100% merged one-token | **0.0%** |
 
-The model needs the extra decode steps. The stored transcript says it didn't.
+The prompt encoding fully determines the output format, and only the
+digit-token pathway computes. Forcing the crossed formats doesn't help
+(restricted argmax: merged answers from digit prompts 0.07%; digit-by-digit
+from merged prompts ≤0.2% — it cannot even unpack merged operands; merged
+from merged reaches only 0.4–1.7% even at argmax, on *half its own training
+data*). The transcript collapse: 13 emitted positions re-encode to 7, the
+three answer decode steps to one, and the model assigns the correct merged
+answer only **0.004–0.006** probability given the re-tokenized transcript.
+
+The model needs the extra decode steps. The stored transcript says it didn't —
+and the stored form is precisely the encoding in which the model can do
+nothing.
 
 That also gives a **text-only detector**: re-tokenized transcripts are 100%
-correct while each carries ~0.003 probability as a one-step generation.
-Astronomically unlikely in aggregate, and checkable from text plus logprobs with
-no token-ID logging at all.
+correct while each carries ~0.005 probability as a one-step generation.
+Astronomically unlikely in aggregate, and checkable from text plus logprobs
+with no token-ID logging at all.
+
+**The carry probe fails on the replay even though the replay is
+in-distribution.** A linear probe recovers the deep (two-step) carry at 80–94%
+on the real digit-token stream, but only 55–62% (base rate 50.9%) at the
+re-tokenized positions — on a format the model trained on half the time. The
+information isn't linearly recoverable at the collapsed positions; a probe run
+on the stored transcript reports near-chance for a computation the model
+demonstrably performed. (An earlier variant of this model — trained without
+merged operands, as an uncued 70/30 mixture — behaves the same way on every
+measure, and additionally shows the format choice can be a pure sampling
+event: at temperature 1 it emits the merged form on 29% of samples at <1%
+accuracy. Its checkpoints are published as `retok-main-s*`; full numbers in
+RESULTS.md.)
 
 **In real models the damage has two different ranges.** BPE pre-tokenizes on
 whitespace, so a bad split of one word doesn't change how later words encode —
@@ -252,7 +272,7 @@ conceptualise its output in pieces. But the accessible lever is coarse
 (word-level concatenation), not a controllable encoder, which argues *against* an
 easy steganographic channel.
 
-## 4. Two RL arms: drift off canonical is real, but task- and lineage-dependent
+## 4. RL under a tokenization-blind reward: two pre-registered arms (pilot)
 
 §3 asked whether a *prompt* can move a model off canonical segmentation. The
 RL question is sharper: rewarding the **decoded text** is exactly what RLVR
@@ -268,69 +288,163 @@ chunks, where one correct prediction covers 2–16 digits. Staying canonical is
 a needle: greedy-longest differs from canonical for 93 of 98 divisors, so the
 null requires landing on precisely BPE's merge-order segmentation.
 
-| GRPO step | canonical | greedy-longest | all-single-digit |
-|---:|---:|---:|---:|
-| 50 | 100.0% | 0.0% | 0.0% |
-| 400 | 99.0% | 0.5% | 0.0% |
-| 800 | 95.2% | 3.4% | 0.0% |
-| 1200 | 79.3% | 19.2% | 0.0% |
-| 1600 | 69.2% | 27.9% | 0.3% |
-| 2000 | **61.5%** | **37.5%** | **1.6%** |
+The table below is the artifact-backed replication (Run 6, identical
+config; 15,416 per-rollout records with token IDs, including a step-0
+baseline the original run lacked; every number recomputes from them). The
+original run (Run 4, training-log metrics only) reached canonical 61.5% /
+greedy-longest 37.5% at the cap under the exclusive attractor labels (no
+retained artifacts to recompute the non-exclusive form) — same direction,
+somewhat further; treat the difference as run-to-run spread. Both in
+`retok_rl/RESULTS.md`.
 
-**Canonical fell 100% → 61.5% of rollouts in 2,000 steps under a reward blind
-to tokenization, and was still falling at the step cap.** The drift is a mix
-of both predicted attractors, weighted heavily toward memorisation: mostly
-greedy-longest chunks, with the single-digit form appearing late and small
-(0 → 1.6%). It is also capability-gated: gpt2 (124M) at identical settings
-stayed ~99% canonical while failing the task — the drift appeared only once
-the model could actually earn the reward.
+| GRPO step | digits per answer | tokens per answer | % answers matching canonical | % matching greedy-longest | % matching all-single-digit | % answer tokens non-canonical |
+|---:|---:|---:|---:|---:|---:|---:|
+| 0 | 3.0 | 1.43 | 97.1% | 76.8% | 6.8% | 4.1% |
+| 400 | 3.1 | 1.02 | 98.1% | 100.0% | 0.0% | 3.8% |
+| 800 | 3.1 | 1.03 | 98.6% | 99.5% | 0.0% | 2.8% |
+| 1200 | 3.2 | 1.08 | 96.2% | 100.0% | 0.0% | 7.1% |
+| 1600 | 4.6 | 1.56 | 76.0% | 99.5% | 0.0% | 31.1% |
+| 2000 | 4.9 | 1.66 | **71.2%** | **98.1%** | 0.0% | **35.3%** |
 
-Caveats, recorded in `retok_rl/RESULTS.md`: single seed; reward reached 2.99
-of 30, so the task is far from mastered; held-out reward stayed flat (~2.2) —
-this is 77 memorised expansions, not division; the no-entropy-bonus run
-collapsed and is invalid (the result needs `entropy_coef=0.05` to keep
-exploration alive); and per-rollout artifacts were not retained, so unlike
-§1–3 this table comes from training logs rather than published records. Treat
-it as a pilot.
+<sub>"Tokens per answer" is the mean token count of the emitted digit run —
+mid-training the whole answer is a single token, and at the cap 1.66 tokens
+carry 4.9 digits. The three "% answers matching" columns compare the
+emitted digit run — right or wrong — against each reference segmentation
+of its own surface independently. They are **non-exclusive and do not sum to 100%**: a run can
+match several references, and canonical == greedy-longest for most short
+digit strings (~98% of emitted surfaces mid-training, 69% at step 2000).
+"% answer tokens non-canonical" round-trips the digit run alone
+(`encode(decode(run)) != run`, diff tokens over run tokens), so every
+column measures the same region — the answer. Over the full ~38-token
+completion (answer plus free-running tail text) the per-token rate is
+0.55% → 6.11%, diluted because the digit run is only ~2 of those tokens.
+Single-digit forms vanish immediately and completely: untrained, 19.8% of
+answers contain at least one single-digit token and 6.8% are entirely
+single-digit; from step 400 on, zero single-digit tokens appear in any
+answer run at any eval (0 of 213–346 answer tokens per eval). U+FFFD exclusions grow to ~27% of
+generations by the cap (broken bytes in trailing text).</sub>
 
-**A second pre-registered arm, on a modern model, fails to support the easy
-generalisation.** Word reversal ("spell `garden` backwards") is the task where
-per-character emission genuinely pays — output order tracks computation order,
-the property the digit task lacked — and Qwen2.5-3B-Instruct's tokenizer
-leaves that channel wide open (canonical segmentations of reversed words are
-81% multi-character tokens, while one-letter-per-token is always available).
-Under the same tokenization-blind reward (correct leading characters of the
-decoded completion), reward roughly doubled over 2,000 GRPO steps (0.92 →
-1.94 leading characters; held-out 1.08 → 1.61) while the fraction of
-single-character tokens **fell** from 20% to ~10% — the pre-registered
-compute attractor rose only transiently (to 9.5% of rollouts at step 150)
-before decaying below its baseline, and greedy-longest never left baseline
-noise. The canonical attractor did decline (85.7% → 73.2%), but the
-per-rollout records attribute that to non-compliance rather than
-segmentation drift: nothing penalises trailing garbage or casing, so the
-policy converged on a correct 2–3 character prefix plus junk
-(`car → ['rac','HttpPost']`; exact-match collapsed 6% → 0.6% even as reward
-rose) alongside a rise in uppercase output — neither is a re-segmentation of
-the target string. Two pre-registered caveats apply and we take them: the
-hack capped selection pressure at the first ~2 characters, and the final
-reward sits inside the ~1–2 character band the plan designated in advance as
-"weak evidence either way". A null with caveats, then, not a clean
-refutation — but on the task and tokenizer most favourable to compute-buying
-segmentation, 2,000 steps produced no sustained movement toward it. This arm
-is artifact-backed (16,564 per-rollout records with token IDs, step-0
-baseline included).
+A concrete rollout (step 2000, train split; selected semi-arbitrarily as
+the shortest completion with a non-canonical answer and ≥2 correct
+digits). Prompt `1/86 = 0.`, completion:
 
-The two arms together give the honest reading: RLVR exerts no pressure to
-*stay* canonical, but where the policy actually goes is task- and
-lineage-dependent. The gpt2-large arm drifted into reward-dense memorised
-chunks — a monitor's position-keyed analysis of those re-tokenized rollouts
-would be reading segmentations that never ran more than a third of the time.
-The modern-model arm, handed the best mechanistic reason to buy decode
-steps, moved toward *chunkier* tokens and non-compliant surface forms
-instead, and hacked the reward. Neither arm shows the toy's compute-buying
-mechanism becoming the outcome: all-single-digit reached 1.6% at the
-expansion arm's step cap, and the reversal arm's transient rise decayed to
-under 1% as the prefix hack took over.
+```text
+01133 cavitydefense abbreNeed Paradise Laura offseason Twe anticipiating
+```
+
+The true expansion starts 0.011627…, so reward = 3 (correct prefix
+`011`). The model emitted the digit run as `011|33` — the greedy-longest
+segmentation, whose first token is exactly the three rewarded digits —
+but re-encoding the transcript yields `01|133`. Same five characters,
+different tokens: the token that earned the reward (`011`) does not exist
+in the canonical transcript. The trailing text (unrewarded, unpenalised)
+re-encodes identically in this rollout.
+
+**Read as non-exclusive match rates, the arc is: lock onto greedy-longest
+early, then diverge from canonical as answers lengthen.** Untrained
+gpt2-large matches canonical on 97.1% of its digit runs but greedy-longest
+on only 76.8% (plus 6.8% all-single-digit, 14% single-digit tokens). By
+step 400 the greedy-longest match is ~100% and stays 98–100% for the rest
+of training, while single-digit forms are gone entirely. The canonical
+match stays high exactly as long as the two references coincide (~98% of
+the short mid-training surfaces) and falls to 71.2% once reward pushes
+digit runs longer (3.0 → 4.9) and the references diverge — restricted to
+surfaces that distinguish them, the emitted run matches greedy-longest
+94–100% of the time from step 400 on, vs 97.7% canonical untrained.
+Digit-run per-token non-canonicality: 4.1% untrained, 2.8% at step 800,
+35.3% at the cap. Held-out tracks train (68.5% / 97.0% / 38.3% at the
+cap). A per-divisor check suggests the mechanism is lock-in plus
+extension rather than re-segmentation: of the 13 train divisors whose
+modal answer grew from one token to two by the cap, 11 kept their
+mid-training single-token answer verbatim as the first token (the other 2
+corrected wrong digits), and every such first token is canonical for its
+own surface in isolation — the non-canonicality arises at the seam, where
+the canonical segmentation of the extended string re-chunks across the
+boundary (`011`+`33` re-encodes as `01`+`133`). A length-conditioned
+control separates three effects. Composition: single-token answers are
+0% non-canonical at every eval, and their share shrank as reward
+lengthened answers. Policy: at matched digit length, untrained
+multi-token answers are canonical-leaning (5-digit: 0% non-canonical,
+vs the 50% an always-greedy policy would show; 4-digit: 4% vs 80%)
+while step-2000 answers sit on the always-greedy rate cell-for-cell
+(66.7% at 5 digits, 38.6% at 6) — training genuinely moved segmentation
+from canonical-leaning to greedy, which is not a length artifact.
+Geometry: given the greedy policy, the tokenizer determines the
+non-canonical rate at each length (canonical == greedy for 96% of
+3-digit strings but 48% of 5-digit ones), which is why the rate grows
+as answers lengthen. The reward sees none of this; the emitted form is
+never more tokens than canonical, and is strictly fewer in a third of
+multi-token answers. The composition-free view is the exactly-2-token
+stratum (table in `retok_rl/RESULTS.md`): within it, greedy match goes
+30% → 100% by step 400 and stays there, per-token non-canonicality 12%
+→ 45–80%, while the stratum's share of answers is what grows late
+(2.4% at step 400 → 56.7% at the cap). Modal answers, single seed,
+post-hoc.
+gpt2 (124M) at identical settings stayed ~99% canonical while failing the
+task (reward 0.97 → 1.44) — the drift appeared only in the model that could
+earn the reward.
+
+Caveats, recorded in `retok_rl/RESULTS.md`: single seed per run (two runs);
+reward reached 2.7–3.0 of 30, so the task is far from mastered; held-out
+reward ~2.2–2.3 — this is 77 memorised expansions, not division; and the
+no-entropy-bonus run collapsed and is invalid (the result needs
+`entropy_coef=0.05` to keep exploration alive — a value picked once after
+that collapse and not tuned; the reversal arm below reuses it unchanged).
+
+**The second arm (Arm C): word reversal on Qwen2.5-3B-Instruct.** Reversal
+is the task where per-character emission pays mechanically — output order
+tracks computation order, the property the digit task lacked — and this
+tokenizer leaves the channel open (canonical segmentations of reversed words
+are 81% multi-character tokens; one-letter-per-token is always available).
+Same reward shape (correct leading characters of the decoded completion),
+2,000 GRPO steps, same entropy bonus. This arm is artifact-backed: 16,564
+per-rollout records with token IDs, step-0 baseline included, and every
+number below recomputes from them. What changed, step 0 → 2000:
+
+| metric | step 0 | step 2000 |
+|---|---:|---:|
+| reward (leading correct chars; mean target length 5.5) | 0.92 | 1.94 |
+| held-out reward | 1.08 | 1.61 |
+| exact match | 6.0% | 0.6% |
+| completion length (ratio to target) | 0.92 | 1.45 (at the 16-token cap) |
+| single-char tokens over the letter run | 20.0% | 10.4% |
+| **non-canonical answer run, per token** (`encode(decode(run)) != run`) | 6.1% | 5.2% |
+| non-canonical emission, per token (full completion) | 6.7% | 4.8% |
+| non-canonical answer runs (per generation) | 6.7% | 6.0% |
+| non-canonical, per generation | 7.7% | 37.3% |
+| **single-char tokens, correct region only** | 43.4% | 0.0% |
+| round-trip non-canonical, correct region | 2.4% | 0.0% |
+
+The per-generation row rises for the reason §2 documents: completions grew
+from ~2.5 tokens to the cap (the reward stops counting at the first mismatch,
+so trailing text after the scored prefix is neither rewarded nor penalised,
+and the policy produces plenty of it), and a sequence-level flag accumulates
+with length. Per-token and answer-region canonicality are flat. The
+correct-region rows are the primary segmentation metrics — per token, over
+only the tokens lying entirely within the correct leading prefix, so wrong
+characters can't move them: the correct region was canonically tokenized at
+every eval, and its single-char share fell 43% → 0% (by the end the correct
+prefix is carried by exactly one multi-char token; per position, character 1
+went 50% → 0% single-char-carried). Among fully compliant rollouts
+(non-exclusive matches — a surface can match several references) canonical
+was 91% early (n=34) and 100% late (n=41), greedy-longest 38% early and
+100% late — every late compliant surface has canonical == greedy-longest —
+and all-single-char 0% throughout; exact matches collapsed to ~1%, so late
+n is small. Two pre-registered notes: the
+reward scores only the leading correct prefix, so selection pressure
+concentrated on the first ~2 characters; and the final reward sits inside
+the ~1–2 character band the plan marked in advance as "weak evidence either
+way". Single seed.
+
+Summarising both arms by the metric they share — per-token round-trip
+canonicality of the answer run alone, the same region under the same
+metric: it **rose ~9× in the expansion arm** (4.1% → 35.3%; the drift
+lands almost exactly on greedy-longest chunks) and **stayed flat in the
+reversal arm** (6.1% → 5.2%, with the correct region canonically tokenized
+at every eval). Where segmentation moved, it moved toward *fewer, longer*
+tokens; the compute-buying form appeared in neither arm — all-single-digit
+was 0% throughout expansion training, all-single-char 0% of compliant
+reversal answers.
 
 ## What we're claiming, and what was already known
 
@@ -376,12 +490,18 @@ direct empirical answer to the first; §3 and §4 are partial ones to the second
 
 - The toy's magnitude is **constructed by design** — we chose the vocabulary and
   the width. It demonstrates the mechanism, not a deployment rate.
-- The re-tokenized replay is **off-distribution** for the model: merged tokens
-  only ever follow `=` in training, so it has never read one as an operand. We
-  take that to be the point rather than a confound — a re-tokenized transcript
-  *is* a sequence the model never emitted — but it means the collapse in
-  probability and probe accuracy mixes "can't compute it in one step" with
-  "can't read this input". The digit-operand control separates the two.
+- In the featured model the re-tokenized replay is a trained format, so the
+  probe collapse cannot be blamed on distribution shift; the cost of that
+  design is that the answer format is **cued by the prompt encoding** (digit
+  vs merged operands are distinguishable), so this model does not exhibit an
+  uncued format mixture. The earlier `retok-main-s*` variant (uncued 70/30,
+  digit operands in both formats) shows the sampling-mixture behaviour and
+  the same accuracy/probe pattern; its replay is off-distribution, which is
+  exactly the confound the featured model was pre-registered to remove.
+- **One of three merged-operands seeds undertrained** (s2: CoT 71.8%,
+  degrading with carry-chain length) at the 50/50 data share; the §1 grid
+  and probe numbers are from the two converged seeds, and all three
+  checkpoints are published.
 - The toy's **whole sequence** re-tokenizes, operands included. What decides
   this is not prompt-vs-completion but *which spans the model wrote*: a CoT
   scratchpad routinely restates its inputs before working on them, so asked
@@ -401,9 +521,11 @@ direct empirical answer to the first; §3 and §4 are partial ones to the second
   that has gone missing.
 - **Small N is the main statistical weakness.** A few hundred generations per
   cell, one seed, short completions; the API rows add frontier coverage but at
-  68–100 generations per model, under provider-default sampling truncation and
-  mixed quantization (both of which suppress tail tokens, so those rates are
-  conservative). The confident-flip
+  68–100 generations per model under mixed quantization (rates remain lower
+  bounds; a 2026-08-30 re-run with truncation pinned explicitly — `top_p=1`,
+  plus `top_k=0` where endpoints accept it — moved no model's rate
+  materially, so provider-default sampling truncation was not suppressing
+  them; see RESULTS.md "API re-measurement"). The confident-flip
   rate rests on a handful of events; we give raw counts and Wilson intervals
   rather than bare percentages, and the intervals are wide. Read the rates as
   order-of-magnitude. (An early Qwen reading of 0% at 0-of-64 did not survive

@@ -219,3 +219,4 @@ __marimo__/
 
 # Experiment outputs (checkpoints, generation records, analysis JSON)
 data/
+wandb/

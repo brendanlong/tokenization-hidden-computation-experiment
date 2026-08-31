@@ -69,16 +69,18 @@ repetition_penalty=1.0` — pinned explicitly, not inherited from each repo's
 | `lw_comparison/<model>.jsonl` | the three "Weird Re-Tokenization" comparison models, our methodology |
 | `api/<model>.jsonl` | frontier models measured via chat-completions logprobs (OpenAI: `generated_ids`; OpenRouter: `sampled_tokens` strings + `provider`) |
 | `api/induce_<model>.jsonl` | the prompted-induction probe + controls on the frontier models |
+| `rl/<run>.rollouts.jsonl` | per-rollout records from the RL arms (token IDs, targets, per-eval; gpt2-large expansion replication + Qwen2.5-3B reversal) |
 | `interp_<model>.jsonl` | boundary-divergence records (per-generation, with KL / next-token IDs at the first non-canonical boundary) |
 | `decay_<model>.jsonl` | contamination-decay records (per-generation, with KL / top-1 flip at each distance past the span) |
 | `temperature_<model>.jsonl` | temperature-sweep records (rate-table schema plus varying `temperature`) |
-| `checkpoints/retok-main-s{0,1,2}/final.pt` | the 3 main toy-model seeds (2 layers, dim 16) |
+| `checkpoints/retok-main-s{0,1,2}/final.pt` | the 3 original toy-model seeds (2 layers, dim 16; uncued 70/30 mixture) |
+| `checkpoints/retok-mergedops-s{0,1,2}/final.pt` | the merged-operands variant (50/50; direct format fully canonical incl. operands; s2's CoT undertrained — see RESULTS.md) |
 | `checkpoints/retok-sweep-cot-d<N>/final.pt` | width sweep, CoT arm, dim ∈ {8,12,24,32,64} |
 | `checkpoints/retok-sweep-1step-d<N>/final.pt` | width sweep, one-step arm, dim ∈ {8,12,16,24,32,64} |
 | `checkpoints/retok-sweep-{1L,2L,4L}/final.pt` | depth sweep |
 | `checkpoints/retok-main-s<seed>/final.pt.json` | metadata sidecar (config + final eval) |
 
-17 runs in total. The CoT arm has no `d16` entry because the dim=16 CoT model
+20 runs in total. The CoT arm has no `d16` entry because the dim=16 CoT model
 *is* `retok-main-s{0,1,2}` — that is the headline run. Sidecars exist only for
 those three; the sweep runs predate the sidecar.
 

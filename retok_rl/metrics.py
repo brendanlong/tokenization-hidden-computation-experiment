@@ -55,26 +55,47 @@ def digit_prefix(text: str) -> str:
     return out
 
 
+def reference_matches(
+    tokenizer: object, token_ids: list[int], surface: str
+) -> dict[str, bool]:
+    """Non-exclusive comparison against the three reference segmentations.
+
+    A run can match more than one reference — canonical and greedy-longest
+    coincide for most short digit strings, and a one-character surface
+    matches all three — so these are reported side by side and do NOT sum
+    to 100% across a population. This is the primary reporting form; the
+    exclusive ``classify`` below survives for the training-time attractor
+    curves and forces a precedence on ties.
+    """
+    emitted = [tokenizer.decode([t]) for t in token_ids]  # type: ignore[attr-defined]
+    none = {"all-single-digit": False, "canonical": False, "greedy-longest": False}
+    if "".join(emitted).strip() != surface:
+        return none
+    stripped = [e.strip() if i == 0 else e for i, e in enumerate(emitted)]
+    canon = [
+        tokenizer.decode([t])  # type: ignore[attr-defined]
+        for t in tokenizer.encode(surface, add_special_tokens=False)  # type: ignore[attr-defined]
+    ]
+    return {
+        "all-single-digit": all(len(e) == 1 for e in stripped),
+        "canonical": stripped == canon,
+        "greedy-longest": stripped == greedy_longest(tokenizer, surface),
+    }
+
+
 def classify(tokenizer: object, token_ids: list[int], digits: str) -> str:
     """Which attractor does this token sequence match, over the digit run?
 
-    Compares the emitted tokens covering ``digits`` against the three reference
-    segmentations. Anything else is "other" (a mixture).
+    Exclusive form: ties between references go to the earlier label
+    (all-single-digit, then canonical, then greedy-longest), so
+    "greedy-longest" here means "greedy and not canonical". Prefer
+    ``reference_matches`` for reporting — the references coincide often
+    enough that a forced precedence hides the overlap.
     """
-    emitted = [tokenizer.decode([t]) for t in token_ids]  # type: ignore[attr-defined]
-    if "".join(emitted).strip() != digits:
-        return "other"
-    canon = [
-        tokenizer.decode([t])  # type: ignore[attr-defined]
-        for t in tokenizer.encode(digits, add_special_tokens=False)  # type: ignore[attr-defined]
-    ]
-    stripped = [e.strip() if i == 0 else e for i, e in enumerate(emitted)]
-    if all(len(e) == 1 for e in stripped):
-        return "all-single-digit"
-    if stripped == canon:
-        return "canonical"
-    if stripped == greedy_longest(tokenizer, digits):
-        return "greedy-longest"
+    m = reference_matches(tokenizer, token_ids, digits)
+    for name in ("all-single-digit", "canonical", "greedy-longest"):
+        if m[name]:
+            return name
     return "other"
 
 
@@ -98,30 +119,138 @@ def tokens_covering_digits(
 def summarise(
     tokenizer: object, rollouts: list[tuple[list[int], str]]
 ) -> dict[str, float]:
-    """Aggregate tokenization stats over (token_ids, target) pairs."""
+    """Aggregate tokenization stats over (completion_ids, target) pairs.
+
+    ``completion_ids`` may be the full emitted completion (specials and any
+    non-digit tail included); the digit run is extracted here. Alongside the
+    original attractor mix (which classifies the emitted digit run against
+    the canonical/greedy/single segmentations of *its own* surface), this
+    reports the corrected metric families added after Run 5:
+
+    - **Round-trip canonicality** of the whole emitted stream
+      (``encode(decode(ids)) != ids``), per generation and per token, with
+      U+FFFD exclusions. An unexpected-but-canonical token is not a
+      non-canonical token.
+    - **Correct-region** metrics — per token, only over tokens lying
+      entirely within the correct leading digits (matching the target), so
+      wrong digits and trailing text are excluded by construction — plus a
+      per-position single-digit breakdown (``pos_single_digit/{1..4}``).
+    """
+    import difflib
+
+    special = set(getattr(tokenizer, "all_special_ids", None) or [])
     attractors: Counter[str] = Counter()
+    matches: Counter[str] = Counter()
+    match_n = 0
     single_toks = total_toks = 0
     reward_sum = 0
     digits_sum = 0
+    gen_nc = tok_bad = tok_total = excluded = 0
+    run_nc = run_n = run_tok_bad = run_tok_total = 0
+    cr_single = cr_total = cr_nc = cr_n = 0
+    pos_single: Counter[int] = Counter()
+    pos_n: Counter[int] = Counter()
     for ids, target in rollouts:
-        kept, digits = tokens_covering_digits(tokenizer, ids)
-        reward_sum += leading_correct(digits, target)
+        core = [t for t in ids if t not in special]
+        kept, digits = tokens_covering_digits(tokenizer, core)
+        n_correct = leading_correct(digits, target)
+        reward_sum += n_correct
         digits_sum += len(digits)
+        # round-trip canonicality of the full emitted stream
+        if core:
+            text = tokenizer.decode(core)  # type: ignore[attr-defined]
+            if "�" in text:
+                excluded += 1
+            else:
+                canon = tokenizer.encode(text, add_special_tokens=False)  # type: ignore[attr-defined]
+                tok_total += len(core)
+                if canon != core:
+                    gen_nc += 1
+                    for op, i1, i2, _, _ in difflib.SequenceMatcher(
+                        a=core, b=canon, autojunk=False
+                    ).get_opcodes():
+                        if op != "equal":
+                            tok_bad += i2 - i1
+        # round-trip canonicality of the digit run alone
+        if kept:
+            run_n += 1
+            canon_run = tokenizer.encode(digits, add_special_tokens=False)  # type: ignore[attr-defined]
+            canon_run_sp = tokenizer.encode(  # type: ignore[attr-defined]
+                " " + digits, add_special_tokens=False
+            )
+            run_nc += kept != canon_run and kept != canon_run_sp
+            # per-token, region-only: round-trip the digit run's own raw
+            # surface (leading whitespace included), so the tail after the
+            # answer can neither dilute nor inflate the rate
+            raw_run = tokenizer.decode(kept)  # type: ignore[attr-defined]
+            canon_raw = tokenizer.encode(raw_run, add_special_tokens=False)  # type: ignore[attr-defined]
+            run_tok_total += len(kept)
+            if canon_raw != kept:
+                for op, i1, i2, _, _ in difflib.SequenceMatcher(
+                    a=kept, b=canon_raw, autojunk=False
+                ).get_opcodes():
+                    if op != "equal":
+                        run_tok_bad += i2 - i1
+        # correct-region: tokens entirely within the correct leading digits
+        if n_correct and kept:
+            cr_ids: list[int] = []
+            cr_surface = ""
+            consumed = 0
+            for i, t in enumerate(kept):
+                piece = tokenizer.decode([t])  # type: ignore[attr-defined]
+                stripped = piece.lstrip() if i == 0 else piece
+                if consumed + len(stripped) > n_correct:
+                    break  # straddles the correct/incorrect boundary
+                for j in range(consumed + 1, consumed + len(stripped) + 1):
+                    pos_n[j] += 1
+                    pos_single[j] += len(stripped) == 1
+                cr_ids.append(t)
+                cr_surface += stripped
+                cr_total += 1
+                cr_single += len(stripped) == 1
+                consumed += len(stripped)
+            if cr_ids:
+                cr_n += 1
+                canon_cr = tokenizer.encode(cr_surface, add_special_tokens=False)  # type: ignore[attr-defined]
+                canon_cr_sp = tokenizer.encode(  # type: ignore[attr-defined]
+                    " " + cr_surface, add_special_tokens=False
+                )
+                cr_nc += cr_ids != canon_cr and cr_ids != canon_cr_sp
         if not kept:
             attractors["empty"] += 1
             continue
         attractors[classify(tokenizer, kept, digits)] += 1
+        match_n += 1
+        for name, hit in reference_matches(tokenizer, kept, digits).items():
+            matches[name] += hit
         for i, t in enumerate(kept):
             piece = tokenizer.decode([t])  # type: ignore[attr-defined]
             piece = piece.strip() if i == 0 else piece
             total_toks += 1
             single_toks += len(piece) == 1
     n = max(1, len(rollouts))
+    n_meas = max(1, len(rollouts) - excluded)
     out: dict[str, float] = {
         "mean_reward": reward_sum / n,
         "mean_digits_emitted": digits_sum / n,
         "frac_single_digit_tokens": single_toks / max(1, total_toks),
+        "roundtrip/gen_non_canonical": gen_nc / n_meas,
+        "roundtrip/tok_non_canonical": tok_bad / max(1, tok_total),
+        "roundtrip/digitrun_non_canonical": run_nc / max(1, run_n),
+        "roundtrip/digitrun_tok_non_canonical": run_tok_bad / max(1, run_tok_total),
+        "mean_digitrun_tokens": run_tok_total / max(1, run_n),
+        "roundtrip/excluded": excluded / n,
+        "correct_region/frac_single_digit": cr_single / max(1, cr_total),
+        "correct_region/non_canonical": cr_nc / max(1, cr_n),
+        "correct_region/mean_tokens": cr_total / max(1, cr_n),
     }
     for name in ("all-single-digit", "canonical", "greedy-longest", "other", "empty"):
         out[f"attractor/{name}"] = attractors[name] / n
+    # non-exclusive: a run can match several references, so these three do
+    # not sum to 100%. Denominator: rollouts with a non-empty digit run.
+    for name in ("all-single-digit", "canonical", "greedy-longest"):
+        out[f"match/{name}"] = matches[name] / max(1, match_n)
+    for j in range(1, 5):
+        out[f"pos_single_digit/{j}"] = pos_single[j] / max(1, pos_n[j])
+        out[f"pos_n/{j}"] = float(pos_n[j])
     return out
