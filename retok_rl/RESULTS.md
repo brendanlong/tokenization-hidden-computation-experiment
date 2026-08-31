@@ -353,7 +353,13 @@ Reading notes:
   in the stratum is not constant (3.9 untrained vs 5.8–6.6 trained — the
   greedy compression), so the canonical-match drop 88% → 55% partly
   reflects string length; the greedy-match rise 30% → 100% is the
-  policy. n=5–14 mid-training.
+  policy. n=5–14 mid-training. The exactly-3-token stratum is too thin
+  for a trajectory (n = 8 / 0 / 0 / 1 / 6 / 10 across the same steps)
+  but its endpoints repeat the pattern: untrained 100% canonical-match,
+  12.5% greedy-match, 0% tokens non-canonical (n=8, 6.5 digits);
+  step 2000 30% canonical, 60% greedy, 53.3% tokens non-canonical
+  (n=10, 8.5 digits — the mixtures that match neither reference live in
+  this stratum).
   P(emitted answer token j == canonical token j) at step 2000 is 72.1% /
   53.1% / 30.0% for positions 1/2/3 (step 0: 97.1% / 90.6% / 100%;
   step 800: 98.6% at position 1) — a monotone positional gradient. Its
