@@ -32,7 +32,9 @@ Run:
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import difflib
+import http.client
 import json
 import os
 import time
@@ -117,6 +119,7 @@ def measure(
     top_p: float | None = None,
     top_k: int | None = None,
     prompt_set: str = "default",
+    workers: int = 6,
 ) -> None:
     if prompt_set == "english-v2":
         from retok.phase2_english import ENGLISH_PROMPTS
@@ -129,92 +132,112 @@ def measure(
     fidelity_failures: dict[str, int] = defaultdict(int)
     providers: dict[str, int] = defaultdict(int)
     records: list[dict[str, object]] = []
+    sink = None
+    if jsonl_out:
+        jsonl_out.parent.mkdir(parents=True, exist_ok=True)
+        sink = jsonl_out.open("w")
+
+    def emit(rec: dict) -> None:
+        emit(rec)
+        if sink:
+            sink.write(json.dumps(rec) + "\n")
+            sink.flush()
+
     examples: list[str] = []
 
-    for domain, prompts in prompt_dict.items():
-        for prompt in prompts:
-            for _ in range(n_samples):  # n>1 unsupported by some providers
-                resp = _chat(
-                    model, prompt, temperature, max_tokens, providers_pin, top_p, top_k
-                )
-                providers[resp.get("provider", "?")] += 1
-                if not resp.get("choices"):
-                    # error payload (rate limit, provider fault) delivered
-                    # with HTTP 200 — count and move on
-                    err = str(resp.get("error", {}).get("message", "?"))[:60]
-                    fidelity_failures[f"no-choices:{err}"] += 1
-                    continue
-                choice = resp["choices"][0]
-                content = choice["message"]["content"] or ""
-                lp = (choice.get("logprobs") or {}).get("content") or []
-                prov = resp.get("provider", "?")
-                if not lp or not lp[0].get("bytes"):
-                    fidelity_failures[f"{prov}:no-logprob-bytes"] += 1
-                    continue
-                sampled = [bytes(t["bytes"]) for t in lp]
-                if b"".join(sampled).decode("utf-8", "replace") != content:
-                    fidelity_failures[f"{prov}:bytes-content-mismatch"] += 1
-                    continue
-                canon_ids = tok.encode(content, add_special_tokens=False)
-                canon = [
-                    tok.decode([i], clean_up_tokenization_spaces=False).encode()
-                    for i in canon_ids
-                ]
-                if b"".join(canon) != b"".join(sampled):
-                    # tokenizer round trip altered the text (normalisation);
-                    # not measurable, same exclusion rule as phase2_probe
-                    fidelity_failures[f"{prov}:normalisation"] += 1
-                    continue
-                sb, cb = _boundaries(sampled), _boundaries(canon)
-                bad = 0
-                if sb != cb:
-                    for op, i1, i2, _, _ in difflib.SequenceMatcher(
-                        a=sb, b=cb, autojunk=False
-                    ).get_opcodes():
-                        if op != "equal":
-                            bad += i2 - i1
-                    if len(examples) < 5:
-                        m = next(
-                            o
-                            for o in difflib.SequenceMatcher(
-                                a=sb, b=cb, autojunk=False
-                            ).get_opcodes()
-                            if o[0] != "equal"
-                        )
-                        _, i1, i2, j1, j2 = m
-                        a_s = [
-                            sampled[k].decode("utf-8", "replace") for k in range(i1, i2)
-                        ]
-                        c_s = [
-                            canon[k].decode("utf-8", "replace") for k in range(j1, j2)
-                        ]
-                        examples.append(f"[{domain}] {a_s} | canonical {c_s}")
-                a = agg[domain]
-                a[0] += int(sb != cb)
-                a[1] += 1
-                a[2] += bad
-                a[3] += len(sampled)
-                records.append(
-                    {
-                        "model": model,
-                        "provider": resp.get("provider"),
-                        "domain": domain,
-                        "prompt": prompt,
-                        "temperature": temperature,
-                        "top_p": top_p,
-                        "prompt_set": prompt_set,
-                        "top_k": top_k,
-                        "sampled_tokens": [
-                            s.decode("utf-8", "replace") for s in sampled
-                        ],
-                        "canonical_ids": canon_ids,
-                        "text": content,
-                        "non_canonical": sb != cb,
-                        "excluded": False,
-                    }
-                )
+    tasks = [
+        (domain, prompt)
+        for domain, prompts in prompt_dict.items()
+        for prompt in prompts
+        for _ in range(n_samples)  # n>1 unsupported by some providers
+    ]
 
-    print(f"\n===== OPENROUTER: {model} (temp={temperature}) =====")
+    def safe_chat(task: tuple[str, str]) -> dict:
+        try:
+            return _chat(
+                model, task[1], temperature, max_tokens, providers_pin, top_p, top_k
+            )
+        except (urllib.error.URLError, http.client.HTTPException, OSError) as e:
+            return {"error": {"message": f"request-failed: {e}"}}
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        for (domain, prompt), resp in zip(
+            tasks, pool.map(safe_chat, tasks), strict=True
+        ):
+            providers[resp.get("provider", "?")] += 1
+            if not resp.get("choices"):
+                # error payload (rate limit, provider fault) delivered
+                # with HTTP 200 — count and move on
+                err = str(resp.get("error", {}).get("message", "?"))[:60]
+                fidelity_failures[f"no-choices:{err}"] += 1
+                continue
+            choice = resp["choices"][0]
+            content = choice["message"]["content"] or ""
+            lp = (choice.get("logprobs") or {}).get("content") or []
+            prov = resp.get("provider", "?")
+            if not lp or not lp[0].get("bytes"):
+                fidelity_failures[f"{prov}:no-logprob-bytes"] += 1
+                continue
+            sampled = [bytes(t["bytes"]) for t in lp]
+            if b"".join(sampled).decode("utf-8", "replace") != content:
+                fidelity_failures[f"{prov}:bytes-content-mismatch"] += 1
+                continue
+            canon_ids = tok.encode(content, add_special_tokens=False)
+            canon = [
+                tok.decode([i], clean_up_tokenization_spaces=False).encode()
+                for i in canon_ids
+            ]
+            if b"".join(canon) != b"".join(sampled):
+                # tokenizer round trip altered the text (normalisation);
+                # not measurable, same exclusion rule as phase2_probe
+                fidelity_failures[f"{prov}:normalisation"] += 1
+                continue
+            sb, cb = _boundaries(sampled), _boundaries(canon)
+            bad = 0
+            if sb != cb:
+                for op, i1, i2, _, _ in difflib.SequenceMatcher(
+                    a=sb, b=cb, autojunk=False
+                ).get_opcodes():
+                    if op != "equal":
+                        bad += i2 - i1
+                if len(examples) < 5:
+                    m = next(
+                        o
+                        for o in difflib.SequenceMatcher(
+                            a=sb, b=cb, autojunk=False
+                        ).get_opcodes()
+                        if o[0] != "equal"
+                    )
+                    _, i1, i2, j1, j2 = m
+                    a_s = [sampled[k].decode("utf-8", "replace") for k in range(i1, i2)]
+                    c_s = [canon[k].decode("utf-8", "replace") for k in range(j1, j2)]
+                    examples.append(f"[{domain}] {a_s} | canonical {c_s}")
+            a = agg[domain]
+            a[0] += int(sb != cb)
+            a[1] += 1
+            a[2] += bad
+            a[3] += len(sampled)
+            emit(
+                {
+                    "model": model,
+                    "provider": resp.get("provider"),
+                    "domain": domain,
+                    "prompt": prompt,
+                    "temperature": temperature,
+                    "top_p": top_p,
+                    "prompt_set": prompt_set,
+                    "top_k": top_k,
+                    "sampled_tokens": [s.decode("utf-8", "replace") for s in sampled],
+                    "canonical_ids": canon_ids,
+                    "text": content,
+                    "non_canonical": sb != cb,
+                    "excluded": False,
+                }
+            )
+
+    if sink:
+        sink.close()
+    print(f"\n===== OPENROUTER: {model} (temp={temperature}) =====", flush=True)
     print(f"providers: {dict(providers)}")
     print(f"exclusions by provider/cause: {dict(fidelity_failures)}")
     print(f"{'domain':<24}{'non-canon':>12}{'per-gen':>9}{'per-token':>11}")
@@ -230,11 +253,7 @@ def measure(
     for e in examples:
         print(f"    {e}")
     if jsonl_out:
-        jsonl_out.parent.mkdir(parents=True, exist_ok=True)
-        with jsonl_out.open("w") as f:
-            for r in records:
-                f.write(json.dumps(r) + "\n")
-        print(f"wrote {len(records)} records to {jsonl_out}")
+        print(f"wrote {len(records)} records to {jsonl_out} (incrementally)")
 
 
 def main() -> None:
@@ -276,6 +295,7 @@ def main() -> None:
             top_p=a.top_p,
             top_k=a.top_k,
             prompt_set=a.prompt_set,
+            workers=a.workers,
         )
 
 

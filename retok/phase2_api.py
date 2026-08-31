@@ -103,6 +103,17 @@ def measure(
     agg: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0, 0])
     fidelity_failures = 0
     records: list[dict[str, object]] = []
+    sink = None
+    if jsonl_out:
+        jsonl_out.parent.mkdir(parents=True, exist_ok=True)
+        sink = jsonl_out.open("w")
+
+    def emit(rec: dict) -> None:
+        emit(rec)
+        if sink:
+            sink.write(json.dumps(rec) + "\n")
+            sink.flush()
+
     examples: list[str] = []
 
     for domain, prompts in prompt_dict.items():
@@ -154,7 +165,7 @@ def measure(
                 a[1] += 1
                 a[2] += bad
                 a[3] += len(ids)
-                records.append(
+                emit(
                     {
                         "model": model,
                         "domain": domain,
@@ -170,7 +181,9 @@ def measure(
                     }
                 )
 
-    print(f"\n===== API MEASUREMENT: {model} (temp={temperature}) =====")
+    if sink:
+        sink.close()
+    print(f"\n===== API MEASUREMENT: {model} (temp={temperature}) =====", flush=True)
     print(f"fidelity failures: {fidelity_failures} (bytes/token mismatches)")
     print(f"{'domain':<24}{'non-canon':>12}{'per-gen':>9}{'per-token':>11}")
     for domain in sorted(agg):
@@ -185,11 +198,7 @@ def measure(
     for e in examples:
         print(f"    {e}")
     if jsonl_out:
-        jsonl_out.parent.mkdir(parents=True, exist_ok=True)
-        with jsonl_out.open("w") as f:
-            for r in records:
-                f.write(json.dumps(r) + "\n")
-        print(f"wrote {len(records)} records to {jsonl_out}")
+        print(f"wrote {len(records)} records to {jsonl_out} (incrementally)")
 
 
 def main() -> None:
