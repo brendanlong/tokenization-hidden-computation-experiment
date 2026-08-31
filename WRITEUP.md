@@ -318,8 +318,10 @@ digit strings (~98% of emitted surfaces mid-training, 69% at step 2000).
 column measures the same region — the answer. Over the full ~38-token
 completion (answer plus free-running tail text) the per-token rate is
 0.55% → 6.11%, diluted because the digit run is only ~2 of those tokens.
-Single-digit forms vanish immediately (6.8% of answers and 13.9% of digit
-tokens untrained; 0% from step 400 on). U+FFFD exclusions grow to ~27% of
+Single-digit forms vanish immediately and completely: untrained, 19.8% of
+answers contain at least one single-digit token and 6.8% are entirely
+single-digit; from step 400 on, zero single-digit tokens appear in any
+answer run at any eval (0 of 213–346 answer tokens per eval). U+FFFD exclusions grow to ~27% of
 generations by the cap (broken bytes in trailing text).</sub>
 
 **Read as non-exclusive match rates, the arc is: lock onto greedy-longest
