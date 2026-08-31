@@ -1,4 +1,4 @@
-"""English-only prompt set for the v2 survey (80 prompts, 8 registers).
+"""English-only prompt set for the v2 survey (82 prompts, 9 registers).
 
 Design goals, in order:
 

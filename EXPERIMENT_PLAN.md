@@ -198,7 +198,7 @@ The v1 survey's cross-model comparison is confounded by compliance: models
 do different things with the same prompt (small models answer non-English
 prompts in English; base models ramble), so pooled rates mix "how canonical
 is this model" with "what did it choose to write". v2 fixes the comparison
-by (a) English-only prompts (80, in 8 registers; `retok/phase2_english.py`),
+by (a) English-only prompts (82, in 9 registers; `retok/phase2_english.py`),
 (b) a 1000-token cap, (c) a text-only Haiku judge grading
 instruction-following + coherence per generation (`retok/phase2_judge.py` —
 the judge sees decoded text only, so grading cannot leak the outcome
