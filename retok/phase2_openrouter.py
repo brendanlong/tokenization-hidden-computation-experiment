@@ -138,7 +138,7 @@ def measure(
         sink = jsonl_out.open("w")
 
     def emit(rec: dict) -> None:
-        emit(rec)
+        records.append(rec)
         if sink:
             sink.write(json.dumps(rec) + "\n")
             sink.flush()
