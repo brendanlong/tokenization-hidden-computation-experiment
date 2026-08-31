@@ -69,6 +69,7 @@ repetition_penalty=1.0` — pinned explicitly, not inherited from each repo's
 | `lw_comparison/<model>.jsonl` | the three "Weird Re-Tokenization" comparison models, our methodology |
 | `api/<model>.jsonl` | frontier models measured via chat-completions logprobs (OpenAI: `generated_ids`; OpenRouter: `sampled_tokens` strings + `provider`) |
 | `api/induce_<model>.jsonl` | the prompted-induction probe + controls on the frontier models |
+| `api_pinned/<model>.jsonl` | re-run of the API measurements with sampling truncation pinned explicitly (`top_p=1`; OpenRouter also `top_k=0` where endpoints accept it) — see RESULTS.md "API re-measurement" |
 | `rl/<run>.rollouts.jsonl` | per-rollout records from the RL arms (token IDs, targets, per-eval; gpt2-large expansion replication + Qwen2.5-3B reversal) |
 | `interp_<model>.jsonl` | boundary-divergence records (per-generation, with KL / next-token IDs at the first non-canonical boundary) |
 | `decay_<model>.jsonl` | contamination-decay records (per-generation, with KL / top-1 flip at each distance past the span) |
