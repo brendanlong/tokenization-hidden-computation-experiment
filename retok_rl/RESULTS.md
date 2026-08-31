@@ -321,10 +321,17 @@ Reading notes:
   non-monotone) then sets how much non-canonicality the greedy policy
   yields at each length. Token-count comparison for the 128 multi-token
   step-2000 answers: canonical segmentation of the same digits uses the
-  same number of tokens in 87 and MORE tokens in 41, never fewer. Net
-  reading: training moved segmentation of multi-token answers from
-  canonical-leaning to greedy (at matched length), the reward cannot see
-  this, and string length determines the resulting non-canonical rate.
+  same number of tokens in 87 and MORE tokens in 41, never fewer.
+  Token-count-matched per-token rates show the same ordering: within
+  exactly-2-token answers, 12.0% of tokens non-canonical untrained
+  (n=100 tokens) vs 44.9% at step 2000 (n=236); within 3+-token answers
+  0.0% untrained (n=52) vs 53.3% (n=30); k=1 is 0% throughout. Note
+  2-token answers carry 3.9 digits untrained vs 5.8 trained (the greedy
+  compression), so token-count matching still under-matches string
+  length. Net reading: training moved segmentation of multi-token
+  answers from canonical-leaning to greedy (at matched length), the
+  reward cannot see this, and string length determines the resulting
+  non-canonical rate.
 - **Per-position canonicality** (added 2026-08-30, post-hoc):
   P(emitted answer token j == canonical token j) at step 2000 is 72.1% /
   53.1% / 30.0% for positions 1/2/3 (step 0: 97.1% / 90.6% / 100%;
