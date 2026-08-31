@@ -353,7 +353,15 @@ surfaces that distinguish them, the emitted run matches greedy-longest
 94–100% of the time from step 400 on, vs 97.7% canonical untrained.
 Digit-run per-token non-canonicality: 4.1% untrained, 2.8% at step 800,
 35.3% at the cap. Held-out tracks train (68.5% / 97.0% / 38.3% at the
-cap).
+cap). A per-divisor check suggests the mechanism is lock-in plus
+extension rather than re-segmentation: of the 13 train divisors whose
+modal answer grew from one token to two by the cap, 11 kept their
+mid-training single-token answer verbatim as the first token (the other 2
+corrected wrong digits), and every such first token is canonical for its
+own surface in isolation — the non-canonicality arises at the seam, where
+the canonical segmentation of the extended string re-chunks across the
+boundary (`011`+`33` re-encodes as `01`+`133`). Modal answers, single
+seed, post-hoc; details in `retok_rl/RESULTS.md`.
 gpt2 (124M) at identical settings stayed ~99% canonical while failing the
 task (reward 0.97 → 1.44) — the drift appeared only in the model that could
 earn the reward.

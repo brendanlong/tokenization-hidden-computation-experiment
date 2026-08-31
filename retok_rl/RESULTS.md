@@ -302,6 +302,21 @@ Reading notes:
   cap. The per-generation digit-run row lands within ~1pt of
   greedy-longest + other at every late eval, as it must — a digit run is
   non-canonical iff it deviates from the canonical segmentation.
+- **Lock-in + extension check** (added 2026-08-30, post-hoc): of the 26
+  train divisors in the step-2000 eval, 13 modal answers are still a
+  single token; of the 13 that grew to two tokens, 11 have a first token
+  identical to that divisor's modal single-token answer from steps
+  800–1200 (e.g. b=61 `016` → `016|993`), and the 2 exceptions changed
+  digits, not segmentation (b=53 `016` → `018|604`, correcting toward
+  0.01886…). All 13 first tokens are canonical for their own surface in
+  isolation. Consistent with late answers being built by appending a
+  second 3-digit chunk to a locked-in first token, with non-canonicality
+  arising at the seam — the canonical segmentation of the joined string
+  re-chunks across the boundary (`011`+`33` re-encodes as `01`+`133`).
+  This also accounts for the greedy-longest direction: the locked-in
+  first token is almost always the longest token prefix of the extended
+  answer, i.e. greedy's first step. Caveats: modal answers, n=13, single
+  seed, post-hoc.
 - **Replicates Run 4's direction at somewhat smaller magnitude**: canonical
   fell to 71.2% here vs 61.5% in Run 4, greedy-longest reached 27.9% vs
   37.5%, reward 2.72 vs 2.99, digits emitted 4.9 vs 5.2. Same config, new
