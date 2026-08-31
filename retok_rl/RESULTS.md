@@ -163,7 +163,12 @@ Held-out tracks train on every metric (e.g. per-token round trip 4.2% →
   exact matches): canonical 91.2% pooled over steps 0–150 (n=34), 100%
   pooled over steps 1500–2000 (n=41); all-single-char 0% at every eval.
   Exact matches collapsed (6.0% → 0.6%; length-3 words 25% → 4%), so late n
-  is small.
+  is small. Non-exclusive match rates (added 2026-08-30;
+  `match_compliant/*` in `reversal.py`, same pooling): canonical 91.2%
+  early / 100% late, greedy-longest 38.2% early / 100% late,
+  all-single-char 0% throughout — every late compliant surface has
+  canonical == greedy-longest (87.1% of compliant surfaces across all
+  evals do), so the two references are indistinguishable there.
 - The **correct-region rows** (added 2026-08-30; `correct_region/*` in
   `reversal.py`) are the primary segmentation metrics: computed per token,
   only over tokens lying entirely within the correct leading prefix of the
@@ -247,6 +252,9 @@ All numbers below recompute from `rollouts.jsonl` via `metrics.summarise`.
 | greedy-longest attractor | 0.5% | 1.9% | 1.4% | 3.8% | 23.6% | **27.9%** |
 | all-single-digit attractor | 6.7% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | other | 2.4% | 0.0% | 0.0% | 0.0% | 0.5% | 1.0% |
+| matches canonical (non-exclusive) | 97.1% | 98.1% | 98.6% | 96.2% | 76.0% | 71.2% |
+| matches greedy-longest (non-exclusive) | 76.8% | 100.0% | 99.5% | 100.0% | 99.5% | **98.1%** |
+| matches all-single-digit (non-exclusive) | 6.8% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | single-digit tokens (share of digit tokens) | 13.9% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | **round-trip non-canonical, per token (full completion)** | 0.55% | 8.24% | 4.95% | 5.52% | 6.99% | **6.11%** |
 | **round-trip non-canonical, digit run, per token** | 4.1% | 3.8% | 2.8% | 7.1% | 31.1% | **35.3%** |
@@ -261,6 +269,23 @@ every metric.
 
 Reading notes:
 
+- The **non-exclusive match rows** (added 2026-08-30; `match/*` in
+  `metrics.py`; denominator = rollouts with a non-empty digit run) compare
+  the emitted run against each reference segmentation independently,
+  because the references frequently coincide: canonical == greedy-longest
+  for ~98% of emitted surfaces mid-training (runs of 3.0–3.2 digits) and
+  69% at step 2000. The exclusive attractor rows above force a precedence
+  on ties (all-single-digit, then canonical, then greedy-longest), which
+  hides the overlap — e.g. at step 0 the exclusive canonical row reads
+  89.9% but 97.1% of runs match the canonical segmentation (the 6.7%
+  filed under all-single-digit were single-digit *and* canonical). Read
+  side by side: **greedy-longest match reaches ~100% by step 400 and stays
+  98–100% for the entire run**; canonical match equals it while the
+  references coincide and falls 97.1% → 71.2% as reward lengthens the
+  digit runs (3.0 → 4.9) and the references diverge. Restricted to the
+  surfaces where the references differ, the emitted run matched
+  greedy-longest 94–100% of the time from step 400 on (n=4–62 per eval),
+  vs 97.7% canonical untrained (n=44).
 - The **digit-run rows** (added 2026-08-30;
   `roundtrip/digitrun_tok_non_canonical` in `metrics.py`) round-trip the
   emitted digit run alone — `encode(decode(kept_ids))` vs `kept_ids`, diff

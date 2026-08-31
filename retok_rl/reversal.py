@@ -23,7 +23,7 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from retok_rl.metrics import greedy_longest, leading_correct
+from retok_rl.metrics import leading_correct, reference_matches
 
 if TYPE_CHECKING:
     from transformers import PreTrainedTokenizerBase
@@ -466,17 +466,12 @@ def classify_letters(
     metrics; canonicality of arbitrary emitted text is measured separately
     by the round-trip check in ``summarise_reversal``.
     """
-    emitted = [tok.decode([t]) for t in token_ids]
-    if "".join(emitted).strip() != letters:
-        return "other"
-    stripped = [e.strip() if i == 0 else e for i, e in enumerate(emitted)]
-    if all(len(e) == 1 for e in stripped):
+    m = reference_matches(tok, token_ids, letters)
+    if m["all-single-digit"]:
         return "all-single-char"
-    canon = [tok.decode([t]) for t in tok.encode(letters, add_special_tokens=False)]
-    if stripped == canon:
-        return "canonical"
-    if stripped == greedy_longest(tok, letters):
-        return "greedy-longest"
+    for name in ("canonical", "greedy-longest"):
+        if m[name]:
+            return name
     return "other"
 
 
@@ -525,6 +520,7 @@ def summarise_reversal(
     """
     special = set(tok.all_special_ids)
     attractors: Counter[str] = Counter()
+    matches: Counter[str] = Counter()
     single_toks = total_toks = 0
     reward_sum = overlap_sum = len_ratio_sum = 0.0
     exact = attempted = empty = 0
@@ -581,6 +577,8 @@ def summarise_reversal(
         # segmentation-of-the-answer: compliant rollouts only
         if compliant and kept:
             attractors[classify_letters(tok, kept, surface)] += 1
+            for name, hit in reference_matches(tok, kept, surface).items():
+                matches[name] += hit
         for i, t in enumerate(kept):
             piece = tok.decode([t])
             piece = piece.strip() if i == 0 else piece
@@ -635,6 +633,15 @@ def summarise_reversal(
     }
     for name in ("all-single-char", "canonical", "greedy-longest", "other"):
         out[f"attractor_compliant/{name}"] = attractors[name] / n_comp
+    # non-exclusive: a compliant answer can match several references
+    # (canonical == greedy-longest for 87% of compliant surfaces in Run 5),
+    # so these do not sum to 100%. Denominator: compliant rollouts.
+    for src, name in (
+        ("all-single-digit", "all-single-char"),
+        ("canonical", "canonical"),
+        ("greedy-longest", "greedy-longest"),
+    ):
+        out[f"match_compliant/{name}"] = matches[src] / n_comp
     for j in range(1, 5):
         out[f"pos_single_char/{j}"] = pos_single[j] / max(1, pos_n[j])
         out[f"pos_n/{j}"] = float(pos_n[j])

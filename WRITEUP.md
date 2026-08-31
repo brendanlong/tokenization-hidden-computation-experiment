@@ -292,41 +292,48 @@ The table below is the artifact-backed replication (Run 6, identical
 config; 15,416 per-rollout records with token IDs, including a step-0
 baseline the original run lacked; every number recomputes from them). The
 original run (Run 4, training-log metrics only) reached canonical 61.5% /
-greedy-longest 37.5% at the cap — same direction, somewhat further; treat
-the difference as run-to-run spread. Both in `retok_rl/RESULTS.md`.
+greedy-longest 37.5% at the cap under the exclusive attractor labels (no
+retained artifacts to recompute the non-exclusive form) — same direction,
+somewhat further; treat the difference as run-to-run spread. Both in
+`retok_rl/RESULTS.md`.
 
-| GRPO step | digits emitted | canonical | greedy-longest | single-digit tokens | non-canonical per token (digit run) |
+| GRPO step | digits per answer | % answers matching canonical | % matching greedy-longest | % matching all-single-digit | % answer tokens non-canonical |
 |---:|---:|---:|---:|---:|---:|
-| 0 | 3.0 | 89.9% | 0.5% | 13.9% | 4.1% |
-| 400 | 3.1 | 98.1% | 1.9% | 0.0% | 3.8% |
-| 800 | 3.1 | 98.6% | 1.4% | 0.0% | 2.8% |
-| 1200 | 3.2 | 96.2% | 3.8% | 0.0% | 7.1% |
-| 1600 | 4.6 | 76.0% | 23.6% | 0.0% | 31.1% |
-| 2000 | 4.9 | **71.2%** | **27.9%** | 0.0% | **35.3%** |
+| 0 | 3.0 | 97.1% | 76.8% | 6.8% | 4.1% |
+| 400 | 3.1 | 98.1% | 100.0% | 0.0% | 3.8% |
+| 800 | 3.1 | 98.6% | 99.5% | 0.0% | 2.8% |
+| 1200 | 3.2 | 96.2% | 100.0% | 0.0% | 7.1% |
+| 1600 | 4.6 | 76.0% | 99.5% | 0.0% | 31.1% |
+| 2000 | 4.9 | **71.2%** | **98.1%** | 0.0% | **35.3%** |
 
-<sub>"Canonical"/"greedy-longest" classify the emitted digit run — right or
-wrong — against the canonical/greedy segmentations of its own surface;
-"single-digit tokens" is the share of emitted digit tokens of length 1;
-"non-canonical per token (digit run)" round-trips the emitted digit run
-alone (`encode(decode(run)) != run`, diff tokens over run tokens), so
-every column measures the same region — the answer. Over the full ~38-token
+<sub>The three "% answers matching" columns compare the emitted digit run —
+right or wrong — against each reference segmentation of its own surface
+independently. They are **non-exclusive and do not sum to 100%**: a run can
+match several references, and canonical == greedy-longest for most short
+digit strings (~98% of emitted surfaces mid-training, 69% at step 2000).
+"% answer tokens non-canonical" round-trips the digit run alone
+(`encode(decode(run)) != run`, diff tokens over run tokens), so every
+column measures the same region — the answer. Over the full ~38-token
 completion (answer plus free-running tail text) the per-token rate is
 0.55% → 6.11%, diluted because the digit run is only ~2 of those tokens.
-The all-single-digit attractor was 6.7% untrained and 0% for the whole of
-training. Digit runs lengthen with reward (3.0 → 4.9), which mechanically
-depresses the per-rollout canonical rate; "other" stayed ≤2.4%, so
-deviations land almost exactly on greedy-longest. U+FFFD exclusions grow to
-~27% of generations by the cap (broken bytes in trailing text).</sub>
+Single-digit forms vanish immediately (6.8% of answers and 13.9% of digit
+tokens untrained; 0% from step 400 on). U+FFFD exclusions grow to ~27% of
+generations by the cap (broken bytes in trailing text).</sub>
 
-**The step-0 baseline reshapes the story: the RL arc is
-concentrate-then-chunk.** Untrained gpt2-large is only ~90% canonical on its
-emitted digit runs (14% single-digit tokens). Early training first
-concentrates onto canonical forms (98.6% by step 800; single-digit tokens
-→ 0 immediately), and only once reward is established does the policy drift
-into reward-dense greedy-longest chunks — canonical 71.2% and still falling
-at the cap, with digit-run per-token non-canonicality at 35.3%, up from
-4.1% untrained (and below 1% at several evals during the concentrate
-phase). Held-out tracks train (68.5% / 29.8% / 38.3% at the cap).
+**Read as non-exclusive match rates, the arc is: lock onto greedy-longest
+early, then diverge from canonical as answers lengthen.** Untrained
+gpt2-large matches canonical on 97.1% of its digit runs but greedy-longest
+on only 76.8% (plus 6.8% all-single-digit, 14% single-digit tokens). By
+step 400 the greedy-longest match is ~100% and stays 98–100% for the rest
+of training, while single-digit forms are gone entirely. The canonical
+match stays high exactly as long as the two references coincide (~98% of
+the short mid-training surfaces) and falls to 71.2% once reward pushes
+digit runs longer (3.0 → 4.9) and the references diverge — restricted to
+surfaces that distinguish them, the emitted run matches greedy-longest
+94–100% of the time from step 400 on, vs 97.7% canonical untrained.
+Digit-run per-token non-canonicality: 4.1% untrained, 2.8% at step 800,
+35.3% at the cap. Held-out tracks train (68.5% / 97.0% / 38.3% at the
+cap).
 gpt2 (124M) at identical settings stayed ~99% canonical while failing the
 task (reward 0.97 → 1.44) — the drift appeared only in the model that could
 earn the reward.
@@ -372,9 +379,12 @@ only the tokens lying entirely within the correct leading prefix, so wrong
 characters can't move them: the correct region was canonically tokenized at
 every eval, and its single-char share fell 43% → 0% (by the end the correct
 prefix is carried by exactly one multi-char token; per position, character 1
-went 50% → 0% single-char-carried). Among fully compliant rollouts the
-attractor mix is 91% canonical early, 100% late, all-single-char 0%
-throughout; exact matches collapsed to ~1%, so late n is small. Two pre-registered notes: the
+went 50% → 0% single-char-carried). Among fully compliant rollouts
+(non-exclusive matches — a surface can match several references) canonical
+was 91% early (n=34) and 100% late (n=41), greedy-longest 38% early and
+100% late — every late compliant surface has canonical == greedy-longest —
+and all-single-char 0% throughout; exact matches collapsed to ~1%, so late
+n is small. Two pre-registered notes: the
 reward scores only the leading correct prefix, so selection pressure
 concentrated on the first ~2 characters; and the final reward sits inside
 the ~1–2 character band the plan marked in advance as "weak evidence either

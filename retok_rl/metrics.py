@@ -55,26 +55,47 @@ def digit_prefix(text: str) -> str:
     return out
 
 
+def reference_matches(
+    tokenizer: object, token_ids: list[int], surface: str
+) -> dict[str, bool]:
+    """Non-exclusive comparison against the three reference segmentations.
+
+    A run can match more than one reference — canonical and greedy-longest
+    coincide for most short digit strings, and a one-character surface
+    matches all three — so these are reported side by side and do NOT sum
+    to 100% across a population. This is the primary reporting form; the
+    exclusive ``classify`` below survives for the training-time attractor
+    curves and forces a precedence on ties.
+    """
+    emitted = [tokenizer.decode([t]) for t in token_ids]  # type: ignore[attr-defined]
+    none = {"all-single-digit": False, "canonical": False, "greedy-longest": False}
+    if "".join(emitted).strip() != surface:
+        return none
+    stripped = [e.strip() if i == 0 else e for i, e in enumerate(emitted)]
+    canon = [
+        tokenizer.decode([t])  # type: ignore[attr-defined]
+        for t in tokenizer.encode(surface, add_special_tokens=False)  # type: ignore[attr-defined]
+    ]
+    return {
+        "all-single-digit": all(len(e) == 1 for e in stripped),
+        "canonical": stripped == canon,
+        "greedy-longest": stripped == greedy_longest(tokenizer, surface),
+    }
+
+
 def classify(tokenizer: object, token_ids: list[int], digits: str) -> str:
     """Which attractor does this token sequence match, over the digit run?
 
-    Compares the emitted tokens covering ``digits`` against the three reference
-    segmentations. Anything else is "other" (a mixture).
+    Exclusive form: ties between references go to the earlier label
+    (all-single-digit, then canonical, then greedy-longest), so
+    "greedy-longest" here means "greedy and not canonical". Prefer
+    ``reference_matches`` for reporting — the references coincide often
+    enough that a forced precedence hides the overlap.
     """
-    emitted = [tokenizer.decode([t]) for t in token_ids]  # type: ignore[attr-defined]
-    if "".join(emitted).strip() != digits:
-        return "other"
-    canon = [
-        tokenizer.decode([t])  # type: ignore[attr-defined]
-        for t in tokenizer.encode(digits, add_special_tokens=False)  # type: ignore[attr-defined]
-    ]
-    stripped = [e.strip() if i == 0 else e for i, e in enumerate(emitted)]
-    if all(len(e) == 1 for e in stripped):
-        return "all-single-digit"
-    if stripped == canon:
-        return "canonical"
-    if stripped == greedy_longest(tokenizer, digits):
-        return "greedy-longest"
+    m = reference_matches(tokenizer, token_ids, digits)
+    for name in ("all-single-digit", "canonical", "greedy-longest"):
+        if m[name]:
+            return name
     return "other"
 
 
@@ -119,6 +140,8 @@ def summarise(
 
     special = set(getattr(tokenizer, "all_special_ids", None) or [])
     attractors: Counter[str] = Counter()
+    matches: Counter[str] = Counter()
+    match_n = 0
     single_toks = total_toks = 0
     reward_sum = 0
     digits_sum = 0
@@ -197,6 +220,9 @@ def summarise(
             attractors["empty"] += 1
             continue
         attractors[classify(tokenizer, kept, digits)] += 1
+        match_n += 1
+        for name, hit in reference_matches(tokenizer, kept, digits).items():
+            matches[name] += hit
         for i, t in enumerate(kept):
             piece = tokenizer.decode([t])  # type: ignore[attr-defined]
             piece = piece.strip() if i == 0 else piece
@@ -219,6 +245,10 @@ def summarise(
     }
     for name in ("all-single-digit", "canonical", "greedy-longest", "other", "empty"):
         out[f"attractor/{name}"] = attractors[name] / n
+    # non-exclusive: a run can match several references, so these three do
+    # not sum to 100%. Denominator: rollouts with a non-empty digit run.
+    for name in ("all-single-digit", "canonical", "greedy-longest"):
+        out[f"match/{name}"] = matches[name] / max(1, match_n)
     for j in range(1, 5):
         out[f"pos_single_digit/{j}"] = pos_single[j] / max(1, pos_n[j])
         out[f"pos_n/{j}"] = float(pos_n[j])
