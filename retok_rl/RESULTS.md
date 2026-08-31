@@ -143,6 +143,7 @@ Artifacts: 16,564 per-rollout records (token IDs, targets, per-eval) in
 | single-char tokens over the letter run | 20.0% | 19.2% | 10.9% | 11.8% | 10.4% |
 | **round-trip non-canonical, per token** | 6.7% | 3.9% | 5.9% | 4.5% | **4.8%** |
 | **round-trip non-canonical, answer run only** | 6.7% | 8.3% | 8.3% | 4.2% | **6.0%** |
+| **round-trip non-canonical, answer run, per token** | 6.1% | 8.4% | 8.4% | 4.4% | **5.2%** |
 | round-trip non-canonical, per generation | 7.7% | 26.7% | 46.8% | 36.6% | 37.3% |
 | excluded (U+FFFD, unmeasurable) | 0.0% | 1.8% | 17.3% | 20.2% | 10.7% |
 | **single-char tokens, correct region only** | 43.4% | 55.3% | 11.1% | 1.9% | **0.0%** |
@@ -173,6 +174,13 @@ Held-out tracks train on every metric (e.g. per-token round trip 4.2% →
   (mean 1.26 → 1.00 tokens). Per-position: position 1 went 50% → 0%
   single-char-carried (n=42 → 63); positions 2–3 were multi-char-carried
   throughout; position 4+ was almost never reached.
+- The **answer-run per-token row** (added 2026-08-30;
+  `roundtrip/answer_tok_non_canonical` in `reversal.py`) round-trips the
+  emitted letter run alone — `encode(decode(kept_ids))` vs `kept_ids`,
+  diff tokens over run tokens — so it measures only the answer region and
+  is not diluted or inflated by trailing text. It is flat: 6.1% → 5.2%
+  train, 3.6% held-out at 2000, no trend across the 41 evals (range
+  1.8–13.3%, the 11.8/13.3% values at steps 50/100 only).
 - The step-0 per-token rate (6.7% train / 4.2% held-out) is far above
   Qwen2.5's Phase-2 english rate (0.00%); reversed-word text is
   off-distribution, the regime Phase 2 measured as high-rate.
@@ -241,15 +249,31 @@ All numbers below recompute from `rollouts.jsonl` via `metrics.summarise`.
 | other | 2.4% | 0.0% | 0.0% | 0.0% | 0.5% | 1.0% |
 | single-digit tokens (share of digit tokens) | 13.9% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | **round-trip non-canonical, per token (full completion)** | 0.55% | 8.24% | 4.95% | 5.52% | 6.99% | **6.11%** |
+| **round-trip non-canonical, digit run, per token** | 4.1% | 3.8% | 2.8% | 7.1% | 31.1% | **35.3%** |
+| round-trip non-canonical, digit run, per generation | 2.9% | 1.9% | 1.4% | 3.8% | 24.0% | 28.8% |
 | correct-region single-digit | 83.3% | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% |
 | correct-region non-canonical | 0.0% | 0.0% | 0.0% | 0.0% | 0.0% | 0.7% |
 | excluded (U+FFFD) | 0.5% | 16.8% | 23.1% | 20.2% | 23.1% | 27.4% |
 
 Held-out at 2000: reward 2.28, canonical 68.5%, greedy-longest 29.8%,
-per-token round trip 6.46% — tracks train on every metric.
+per-token round trip 6.46% (digit run alone: 38.3%) — tracks train on
+every metric.
 
 Reading notes:
 
+- The **digit-run rows** (added 2026-08-30;
+  `roundtrip/digitrun_tok_non_canonical` in `metrics.py`) round-trip the
+  emitted digit run alone — `encode(decode(kept_ids))` vs `kept_ids`, diff
+  tokens over run tokens — so the answer region is measured by itself
+  rather than diluted across the ~38-token completion (at step 2000 the
+  digit run is ~2 of those tokens, which is why the full-completion rate
+  sits at 6.1% while a third of the answer tokens are non-canonical). The
+  concentrate-then-chunk arc is directly visible in this row: 4.1%
+  untrained → below 1% at several early evals (0.88% at step 50, 0.91% at
+  500, 0.95% at 750 in the per-50-step artifact series) → 35.3% at the
+  cap. The per-generation digit-run row lands within ~1pt of
+  greedy-longest + other at every late eval, as it must — a digit run is
+  non-canonical iff it deviates from the canonical segmentation.
 - **Replicates Run 4's direction at somewhat smaller magnitude**: canonical
   fell to 71.2% here vs 61.5% in Run 4, greedy-longest reached 27.9% vs
   37.5%, reward 2.72 vs 2.99, digits emitted 4.9 vs 5.2. Same config, new

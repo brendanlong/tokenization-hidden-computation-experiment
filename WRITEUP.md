@@ -295,19 +295,23 @@ original run (Run 4, training-log metrics only) reached canonical 61.5% /
 greedy-longest 37.5% at the cap — same direction, somewhat further; treat
 the difference as run-to-run spread. Both in `retok_rl/RESULTS.md`.
 
-| GRPO step | digits emitted | canonical | greedy-longest | single-digit tokens | non-canonical per token |
+| GRPO step | digits emitted | canonical | greedy-longest | single-digit tokens | non-canonical per token (digit run) |
 |---:|---:|---:|---:|---:|---:|
-| 0 | 3.0 | 89.9% | 0.5% | 13.9% | 0.55% |
-| 400 | 3.1 | 98.1% | 1.9% | 0.0% | 8.24% |
-| 800 | 3.1 | 98.6% | 1.4% | 0.0% | 4.95% |
-| 1200 | 3.2 | 96.2% | 3.8% | 0.0% | 5.52% |
-| 1600 | 4.6 | 76.0% | 23.6% | 0.0% | 6.99% |
-| 2000 | 4.9 | **71.2%** | **27.9%** | 0.0% | **6.11%** |
+| 0 | 3.0 | 89.9% | 0.5% | 13.9% | 4.1% |
+| 400 | 3.1 | 98.1% | 1.9% | 0.0% | 3.8% |
+| 800 | 3.1 | 98.6% | 1.4% | 0.0% | 2.8% |
+| 1200 | 3.2 | 96.2% | 3.8% | 0.0% | 7.1% |
+| 1600 | 4.6 | 76.0% | 23.6% | 0.0% | 31.1% |
+| 2000 | 4.9 | **71.2%** | **27.9%** | 0.0% | **35.3%** |
 
 <sub>"Canonical"/"greedy-longest" classify the emitted digit run — right or
 wrong — against the canonical/greedy segmentations of its own surface;
 "single-digit tokens" is the share of emitted digit tokens of length 1;
-"non-canonical per token" is the round-trip check over the full completion.
+"non-canonical per token (digit run)" round-trips the emitted digit run
+alone (`encode(decode(run)) != run`, diff tokens over run tokens), so
+every column measures the same region — the answer. Over the full ~38-token
+completion (answer plus free-running tail text) the per-token rate is
+0.55% → 6.11%, diluted because the digit run is only ~2 of those tokens.
 The all-single-digit attractor was 6.7% untrained and 0% for the whole of
 training. Digit runs lengthen with reward (3.0 → 4.9), which mechanically
 depresses the per-rollout canonical rate; "other" stayed ≤2.4%, so
@@ -320,8 +324,9 @@ emitted digit runs (14% single-digit tokens). Early training first
 concentrates onto canonical forms (98.6% by step 800; single-digit tokens
 → 0 immediately), and only once reward is established does the policy drift
 into reward-dense greedy-longest chunks — canonical 71.2% and still falling
-at the cap, with per-token round-trip non-canonicality up ~11×
-(0.55% → 6.1%). Held-out tracks train (68.5% / 29.8% / 6.46% at the cap).
+at the cap, with digit-run per-token non-canonicality at 35.3%, up from
+4.1% untrained (and below 1% at several evals during the concentrate
+phase). Held-out tracks train (68.5% / 29.8% / 38.3% at the cap).
 gpt2 (124M) at identical settings stayed ~99% canonical while failing the
 task (reward 0.97 → 1.44) — the drift appeared only in the model that could
 earn the reward.
@@ -350,8 +355,9 @@ number below recomputes from them. What changed, step 0 → 2000:
 | exact match | 6.0% | 0.6% |
 | completion length (ratio to target) | 0.92 | 1.45 (at the 16-token cap) |
 | single-char tokens over the letter run | 20.0% | 10.4% |
-| **non-canonical emission, per token** (`encode(decode(ids)) != ids`) | 6.7% | 4.8% |
-| non-canonical answer runs | 6.7% | 6.0% |
+| **non-canonical answer run, per token** (`encode(decode(run)) != run`) | 6.1% | 5.2% |
+| non-canonical emission, per token (full completion) | 6.7% | 4.8% |
+| non-canonical answer runs (per generation) | 6.7% | 6.0% |
 | non-canonical, per generation | 7.7% | 37.3% |
 | **single-char tokens, correct region only** | 43.4% | 0.0% |
 | round-trip non-canonical, correct region | 2.4% | 0.0% |
@@ -374,10 +380,11 @@ concentrated on the first ~2 characters; and the final reward sits inside
 the ~1–2 character band the plan marked in advance as "weak evidence either
 way". Single seed.
 
-Summarising both arms by the metric they share: per-token round-trip
-canonicality **rose ~11× in the expansion arm** (0.55% → 6.1%; the drift
+Summarising both arms by the metric they share — per-token round-trip
+canonicality of the answer run alone, the same region under the same
+metric: it **rose ~9× in the expansion arm** (4.1% → 35.3%; the drift
 lands almost exactly on greedy-longest chunks) and **stayed flat in the
-reversal arm** (6.7% → 4.8%, with the correct region canonically tokenized
+reversal arm** (6.1% → 5.2%, with the correct region canonically tokenized
 at every eval). Where segmentation moved, it moved toward *fewer, longer*
 tokens; the compute-buying form appeared in neither arm — all-single-digit
 was 0% throughout expansion training, all-single-char 0% of compliant

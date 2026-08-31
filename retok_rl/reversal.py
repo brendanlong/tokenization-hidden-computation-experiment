@@ -529,7 +529,7 @@ def summarise_reversal(
     reward_sum = overlap_sum = len_ratio_sum = 0.0
     exact = attempted = empty = 0
     gen_nc = tok_bad = tok_total = excluded = 0
-    ans_nc = ans_n = 0
+    ans_nc = ans_n = ans_tok_bad = ans_tok_total = 0
     cr_single = cr_total = cr_nc = cr_n = 0
     pos_single: Counter[int] = Counter()
     pos_n: Counter[int] = Counter()
@@ -566,6 +566,18 @@ def summarise_reversal(
             canon_run = tok.encode(surface, add_special_tokens=False)
             canon_run_sp = tok.encode(" " + surface, add_special_tokens=False)
             ans_nc += kept != canon_run and kept != canon_run_sp
+            # per-token, region-only: round-trip the letter run's own raw
+            # surface (leading whitespace included), so text after the
+            # answer can neither dilute nor inflate the rate
+            raw_run = tok.decode(kept)
+            canon_raw = tok.encode(raw_run, add_special_tokens=False)
+            ans_tok_total += len(kept)
+            if canon_raw != kept:
+                for op, i1, i2, _, _ in difflib.SequenceMatcher(
+                    a=kept, b=canon_raw, autojunk=False
+                ).get_opcodes():
+                    if op != "equal":
+                        ans_tok_bad += i2 - i1
         # segmentation-of-the-answer: compliant rollouts only
         if compliant and kept:
             attractors[classify_letters(tok, kept, surface)] += 1
@@ -614,6 +626,7 @@ def summarise_reversal(
         "roundtrip/gen_non_canonical": gen_nc / n_meas,
         "roundtrip/tok_non_canonical": tok_bad / max(1, tok_total),
         "roundtrip/answer_non_canonical": ans_nc / max(1, ans_n),
+        "roundtrip/answer_tok_non_canonical": ans_tok_bad / max(1, ans_tok_total),
         "roundtrip/excluded": excluded / n,
         "n_compliant": float(sum(attractors.values())),
         "correct_region/frac_single_char": cr_single / max(1, cr_total),

@@ -123,7 +123,7 @@ def summarise(
     reward_sum = 0
     digits_sum = 0
     gen_nc = tok_bad = tok_total = excluded = 0
-    run_nc = run_n = 0
+    run_nc = run_n = run_tok_bad = run_tok_total = 0
     cr_single = cr_total = cr_nc = cr_n = 0
     pos_single: Counter[int] = Counter()
     pos_n: Counter[int] = Counter()
@@ -156,6 +156,18 @@ def summarise(
                 " " + digits, add_special_tokens=False
             )
             run_nc += kept != canon_run and kept != canon_run_sp
+            # per-token, region-only: round-trip the digit run's own raw
+            # surface (leading whitespace included), so the tail after the
+            # answer can neither dilute nor inflate the rate
+            raw_run = tokenizer.decode(kept)  # type: ignore[attr-defined]
+            canon_raw = tokenizer.encode(raw_run, add_special_tokens=False)  # type: ignore[attr-defined]
+            run_tok_total += len(kept)
+            if canon_raw != kept:
+                for op, i1, i2, _, _ in difflib.SequenceMatcher(
+                    a=kept, b=canon_raw, autojunk=False
+                ).get_opcodes():
+                    if op != "equal":
+                        run_tok_bad += i2 - i1
         # correct-region: tokens entirely within the correct leading digits
         if n_correct and kept:
             cr_ids: list[int] = []
@@ -199,6 +211,7 @@ def summarise(
         "roundtrip/gen_non_canonical": gen_nc / n_meas,
         "roundtrip/tok_non_canonical": tok_bad / max(1, tok_total),
         "roundtrip/digitrun_non_canonical": run_nc / max(1, run_n),
+        "roundtrip/digitrun_tok_non_canonical": run_tok_bad / max(1, run_tok_total),
         "roundtrip/excluded": excluded / n,
         "correct_region/frac_single_digit": cr_single / max(1, cr_total),
         "correct_region/non_canonical": cr_nc / max(1, cr_n),
