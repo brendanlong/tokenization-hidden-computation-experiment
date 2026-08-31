@@ -325,6 +325,16 @@ Reading notes:
   reading: training moved segmentation of multi-token answers from
   canonical-leaning to greedy (at matched length), the reward cannot see
   this, and string length determines the resulting non-canonical rate.
+- **Per-position canonicality** (added 2026-08-30, post-hoc):
+  P(emitted answer token j == canonical token j) at step 2000 is 72.1% /
+  53.1% / 30.0% for positions 1/2/3 (step 0: 97.1% / 90.6% / 100%;
+  step 800: 98.6% at position 1) — a monotone positional gradient. Its
+  source is not late-token drift: among the 60 non-canonical step-2000
+  answers, 97% diverge at token 1 (the locked-in token, e.g. `011` where
+  canonical starts `01`). The gradient reflects composition (answers
+  reaching positions 2–3 are longer, more-divergent strings) plus
+  non-recovery (after a divergence the segmentations stay misaligned, so
+  later positions inherit the mismatch).
 - **Lock-in + extension check** (added 2026-08-30, post-hoc): of the 26
   train divisors in the step-2000 eval, 13 modal answers are still a
   single token; of the 13 that grew to two tokens, 11 have a first token
