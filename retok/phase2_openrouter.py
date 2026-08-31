@@ -131,6 +131,12 @@ def measure(
                     model, prompt, temperature, max_tokens, providers_pin, top_p, top_k
                 )
                 providers[resp.get("provider", "?")] += 1
+                if not resp.get("choices"):
+                    # error payload (rate limit, provider fault) delivered
+                    # with HTTP 200 — count and move on
+                    err = str(resp.get("error", {}).get("message", "?"))[:60]
+                    fidelity_failures[f"no-choices:{err}"] += 1
+                    continue
                 choice = resp["choices"][0]
                 content = choice["message"]["content"] or ""
                 lp = (choice.get("logprobs") or {}).get("content") or []
