@@ -324,6 +324,22 @@ single-digit; from step 400 on, zero single-digit tokens appear in any
 answer run at any eval (0 of 213–346 answer tokens per eval). U+FFFD exclusions grow to ~27% of
 generations by the cap (broken bytes in trailing text).</sub>
 
+A concrete rollout (step 2000, train split; selected semi-arbitrarily as
+the shortest completion with a non-canonical answer and ≥2 correct
+digits). Prompt `1/86 = 0.`, completion:
+
+```text
+01133 cavitydefense abbreNeed Paradise Laura offseason Twe anticipiating
+```
+
+The true expansion starts 0.011627…, so reward = 3 (correct prefix
+`011`). The model emitted the digit run as `011|33` — the greedy-longest
+segmentation, whose first token is exactly the three rewarded digits —
+but re-encoding the transcript yields `01|133`. Same five characters,
+different tokens: the token that earned the reward (`011`) does not exist
+in the canonical transcript. The trailing text (unrewarded, unpenalised)
+re-encodes identically in this rollout.
+
 **Read as non-exclusive match rates, the arc is: lock onto greedy-longest
 early, then diverge from canonical as answers lengthen.** Untrained
 gpt2-large matches canonical on 97.1% of its digit runs but greedy-longest
