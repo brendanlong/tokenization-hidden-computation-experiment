@@ -1,6 +1,9 @@
 """Figures for the retok experiment.
 
-- ``mechanism``: the hero schematic — the model emits the answer over 3 decode
+- ``hero``: the post opener — the elicited ``key``+``board`` collapse
+  (Llama-3.2-1B concat probe, 8/8 trials in the induce artifact): what the
+  model emitted vs what a stored-as-text transcript says.
+- ``mechanism``: the toy schematic — the model emits the answer over 3 decode
   positions; storing it as text and re-encoding collapses it to 1, so
   per-position analysis runs on positions that never existed.
 - ``calibration``: the text-only detector — the re-tokenized transcript is
@@ -665,6 +668,100 @@ def _token_box(
     )
 
 
+def plot_hero(out_path: Path) -> None:
+    """Post opener: a real elicited word-level collapse, thesis in one image.
+
+    Uses the keyboard example (Llama-3.2-1B, concat probe) rather than the
+    toy's digits so it does not repeat the mechanism figure downstream.
+    """
+    fig, ax = plt.subplots(figsize=(8.4, 4.0))
+    fig.patch.set_facecolor("white")
+    ax.set_facecolor("white")
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 4.6)
+    ax.axis("off")
+
+    ax.text(
+        0.1, 4.3, "What the model emitted", fontsize=12, color=INK, fontweight="bold"
+    )
+    ax.text(
+        0.1,
+        3.98,
+        'Llama-3.2-1B, asked to write "key" immediately followed by "board"',
+        fontsize=9.3,
+        color=MUTED,
+    )
+    _token_box(ax, 0.1, 3.25, 1.15, "key", BLUE)
+    _token_box(ax, 1.4, 3.25, 1.7, "board", BLUE)
+    ax.text(
+        3.5,
+        3.46,
+        "2 tokens — 2 forward passes",
+        fontsize=10,
+        color=BLUE,
+        va="center",
+    )
+
+    ax.annotate(
+        "",
+        xy=(0.75, 1.95),
+        xytext=(0.75, 3.1),
+        arrowprops={"arrowstyle": "->", "color": INK, "lw": 1.6},
+    )
+    ax.text(
+        1.0,
+        2.5,
+        'store as text  "keyboard"  →  re-tokenize',
+        fontsize=10,
+        color=INK,
+        va="center",
+    )
+
+    ax.text(
+        0.1,
+        1.62,
+        "What your transcript says",
+        fontsize=12,
+        color=INK,
+        fontweight="bold",
+    )
+    _token_box(ax, 0.1, 0.85, 2.6, "keyboard", ORANGE)
+    ax.text(
+        2.95,
+        1.06,
+        "1 token — the segmentation that ran is gone",
+        fontsize=10,
+        color="#B87700",
+        va="center",
+    )
+
+    banner = mpatches.FancyBboxPatch(
+        (0.1, 0.08),
+        9.4,
+        0.52,
+        boxstyle="round,pad=0.02,rounding_size=0.08",
+        linewidth=0,
+        facecolor="#f0f0ee",
+        zorder=2,
+    )
+    ax.add_patch(banner)
+    ax.text(
+        4.8,
+        0.34,
+        "Same text. Interp tools and monitors read the bottom row — "
+        "the model ran the top one.",
+        fontsize=10.2,
+        color=INK,
+        ha="center",
+        va="center",
+        zorder=3,
+    )
+    fig.tight_layout()
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    print(f"Wrote {out_path}")
+
+
 def plot_mechanism(out_path: Path) -> None:
     """Hero schematic: 3 emitted decode positions collapse to 1 on re-encoding."""
     fig, ax = plt.subplots(figsize=(8.4, 4.6))
@@ -842,6 +939,7 @@ def plot_calibration(out_path: Path) -> None:
 def main() -> None:
     figdir = Path(__file__).resolve().parent.parent / "figures"
     plot_mechanism(figdir / "mechanism.png")
+    plot_hero(figdir / "hero.png")
     plot_calibration(figdir / "calibration.png")
     plot_width_sweep(figdir / "width_sweep.png")
     plot_phase2_rates(figdir / "phase2_rates.png")
