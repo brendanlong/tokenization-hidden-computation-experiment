@@ -21,6 +21,7 @@ that line and skipped by the analysis join.
 from __future__ import annotations
 
 import argparse
+import http.client
 import json
 import os
 import time
@@ -55,6 +56,17 @@ Grade ONLY the output above. Reply with a single JSON object, no other text:
 """
 
 
+def _judge_view(text: str) -> str:
+    """What the judge reads: final-channel-only for harmony models, head+tail
+    truncation for long outputs (so a late final answer is never cut away)."""
+    marker = "<|channel|>final<|message|>"
+    if marker in text:
+        text = text.split(marker)[-1]
+    if len(text) > 6000:
+        text = text[:3000] + "\n...[middle truncated for grading]...\n" + text[-3000:]
+    return text
+
+
 def _judge(prompt: str, text: str, api_key: str) -> dict:
     body = {
         "model": JUDGE_MODEL,
@@ -62,7 +74,7 @@ def _judge(prompt: str, text: str, api_key: str) -> dict:
         "messages": [
             {
                 "role": "user",
-                "content": JUDGE_PROMPT.format(prompt=prompt, text=text[:6000]),
+                "content": JUDGE_PROMPT.format(prompt=prompt, text=_judge_view(text)),
             }
         ],
     }
@@ -90,13 +102,19 @@ def _judge(prompt: str, text: str, api_key: str) -> dict:
                 "language": str(verdict.get("language", "?")),
                 "coherent": bool(verdict.get("coherent", False)),
             }
-        except (urllib.error.HTTPError, urllib.error.URLError) as e:
-            code = getattr(e, "code", None)
-            if code in (429, 500, 502, 503, 529) and attempt < 4:
+        except urllib.error.HTTPError as e:
+            if e.code in (429, 500, 502, 503, 529) and attempt < 4:
                 time.sleep(2**attempt)
                 continue
-            return {"error": f"http:{code or e}"}
-        except (ValueError, KeyError, json.JSONDecodeError) as e:
+            return {"error": f"http:{e.code}"}
+        except (urllib.error.URLError, http.client.HTTPException, OSError) as e:
+            # transient network failure (DNS blip, reset, incomplete read):
+            # retry with backoff rather than poisoning the sidecar
+            if attempt < 4:
+                time.sleep(2**attempt)
+                continue
+            return {"error": f"net:{e}"}
+        except (ValueError, KeyError, IndexError, json.JSONDecodeError) as e:
             if attempt < 4:
                 continue  # re-ask; judge output was malformed
             return {"error": f"parse:{e}"}

@@ -43,6 +43,12 @@ def main() -> None:
         judge_path = d / f"judge_{rec_path.name}"
         with rec_path.open() as fh:
             rows = [json.loads(line) for line in fh]
+        if rows and "generated_ids" not in rows[0]:
+            print(
+                f"{rec_path.stem}: skipped (no generated_ids — OpenRouter "
+                "boundary records; analyse via phase2_openrouter conventions)"
+            )
+            continue
         verdicts: dict[int, dict] = {}
         if judge_path.exists():
             for j in map(json.loads, judge_path.open()):
@@ -58,14 +64,17 @@ def main() -> None:
             compliant = []
             for i, r in measurable:
                 v = verdicts.get(i, {})
-                if "followed" not in v:
-                    # missing, errored, or skipped verdict: ungraded, and
-                    # never counted as compliant
+                if "followed" not in v or v.get("domain") != r["domain"]:
+                    # missing/errored/skipped verdict, or a stale sidecar
+                    # whose rows no longer line up: ungraded, never compliant
                     mix["ungraded"] += 1
                     continue
+                english = v.get("language", "").lower().startswith("english")
                 key = v["followed"] + ("" if v["coherent"] else "/incoherent")
+                if v["followed"] == "full" and v["coherent"] and not english:
+                    key = "full/non-english"
                 mix[key] += 1
-                if v["followed"] == "full" and v["coherent"]:
+                if v["followed"] == "full" and v["coherent"] and english:
                     compliant.append(r)
             c_bad, c_tot = tok_rate(compliant)
             line += (
@@ -78,7 +87,12 @@ def main() -> None:
             by_reg: dict[str, list[dict]] = defaultdict(list)
             for i, r in measurable:
                 v = verdicts.get(i, {})
-                if v.get("followed") == "full" and v.get("coherent"):
+                if (
+                    v.get("followed") == "full"
+                    and v.get("coherent")
+                    and v.get("language", "").lower().startswith("english")
+                    and v.get("domain") == r["domain"]
+                ):
                     by_reg[r["domain"]].append(r)
             for reg in sorted(by_reg):
                 b, t = tok_rate(by_reg[reg])

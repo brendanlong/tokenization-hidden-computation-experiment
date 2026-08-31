@@ -15,7 +15,7 @@
 name: retok-english-survey
 
 resources:
-  accelerators: {A100-80GB:1, A100:1}
+  accelerators: {A100-80GB:1}
   disk_size: 150
 
 workdir: .
@@ -49,9 +49,10 @@ run: |
   nvidia-smi
   if ! uv run python -c 'import sys, torch; sys.exit(0 if torch.cuda.is_available() else 1)'; then
     echo ">>> torch cannot see CUDA; installing the cu128 build"
-    (uv pip list | grep -E '^(nvidia|torch|triton)' || true) | awk '{print $1}' | xargs -r uv pip uninstall
+    (uv pip list | grep -E '^(nvidia|cuda-|torch|triton)' || true) | awk '{print $1}' | xargs -r uv pip uninstall
     uv pip install torch --index-url https://download.pytorch.org/whl/cu128
     export UV_NO_SYNC=1
+    uv run python -c 'import torch; assert torch.cuda.is_available(), "CUDA still unavailable after cu128 swap"'
   fi
   mkdir -p out/english_v2
   for MODEL in $MODELS; do
@@ -68,11 +69,14 @@ run: |
       --temperature 1.0 \
       --seed "$SEED" \
       --dtype auto \
-      --jsonl-out "out/english_v2/${SAFE}.jsonl"
+      --jsonl-out "out/english_v2/${SAFE}.jsonl" \
+      || { echo ">>> FAILED $MODEL (continuing with remaining models)"; continue; }
     # Escape-hatch copy of each artifact into the log, ANSI-safe on extraction.
-    echo ">>> ROLLOUTS_B64_BEGIN ${SAFE}.jsonl"
-    gzip -c "out/english_v2/${SAFE}.jsonl" | base64 -w 120
-    echo ">>> ROLLOUTS_B64_END ${SAFE}.jsonl"
+    if [ -f "out/english_v2/${SAFE}.jsonl" ]; then
+      echo ">>> ROLLOUTS_B64_BEGIN ${SAFE}.jsonl"
+      gzip -c "out/english_v2/${SAFE}.jsonl" | base64 -w 120
+      echo ">>> ROLLOUTS_B64_END ${SAFE}.jsonl"
+    fi
   done
   echo ">>> all models complete"
   ls -la out/english_v2/
