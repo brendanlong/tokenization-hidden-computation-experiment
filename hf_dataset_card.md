@@ -70,6 +70,8 @@ repetition_penalty=1.0` — pinned explicitly, not inherited from each repo's
 | `api/<model>.jsonl` | frontier models measured via chat-completions logprobs (OpenAI: `generated_ids`; OpenRouter: `sampled_tokens` strings + `provider`) |
 | `api/induce_<model>.jsonl` | the prompted-induction probe + controls on the frontier models |
 | `api_pinned/<model>.jsonl` | re-run of the API measurements with sampling truncation pinned explicitly (`top_p=1`; OpenRouter also `top_k=0` where endpoints accept it) — see RESULTS.md "API re-measurement" |
+| `english_v2/<model>.jsonl` | English-only v2 survey: 82 prompts, 1000-token cap, 17 models — see RESULTS.md "English-only v2 survey" |
+| `english_v2/judge_<model>.jsonl` | per-generation instruction-following verdicts (claude-haiku-4-5 judge; text-only) keyed to the records by line index |
 | `rl/<run>.rollouts.jsonl` | per-rollout records from the RL arms (token IDs, targets, per-eval; gpt2-large expansion replication + Qwen2.5-3B reversal) |
 | `interp_<model>.jsonl` | boundary-divergence records (per-generation, with KL / next-token IDs at the first non-canonical boundary) |
 | `decay_<model>.jsonl` | contamination-decay records (per-generation, with KL / top-1 flip at each distance past the span) |
