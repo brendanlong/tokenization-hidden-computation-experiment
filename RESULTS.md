@@ -1434,3 +1434,72 @@ Per-token pooled rates. Reading notes:
   suppressed by sampling truncation; the lower-bound framing for API
   rows can drop the truncation clause and keep the quantization /
   canonicalization caveats.
+
+## English-only v2 survey (2026-08-31; plan pre-registered in EXPERIMENT_PLAN.md)
+
+17 models, 82 English prompts (9 registers), temp 1.0, pure sampling,
+1000-token cap (gpt2 clamped to its 1024 context), 8 samples/prompt open
+models / 4 API. Instruction-following graded per generation by a
+claude-haiku-4-5 judge (text-only; Message Batches). Compliant = judged
+full + coherent + English. Artifacts + judge sidecars: `english_v2/` in
+the HF dataset; recompute via `retok.phase2_english_report` (open+OpenAI)
+and the boundary join in the section below for OpenRouter files.
+
+| model | raw per-token | compliant per-token | compliant n | notes |
+|---|---:|---:|---:|---|
+| gpt2 (scaffolded) | 1.154% | — | 0/646 | zero full compliance |
+| Llama-3.2-1B | 0.211% | 0.029% | 153 | |
+| Qwen2.5-1.5B | 0.071% | 0.015% | 155 | |
+| gemma-2b-it | 0.047% | 0.030% | 249 | |
+| Llama-3.1-8B | 0.042% | 0.014% | 524 | * |
+| Llama-3.2-3B | 0.039% | 0.014% | 452 | * |
+| gpt-oss-20b | 0.030% | 0.027% | 483 | *; bf16-dequantized |
+| gemma-2-2b (base) | 0.026% | 0.000% | 18 | *; base model, 3% compliance |
+| Llama-2-7b-chat | 0.010% | 0.010% | 504 | * |
+| gemma-3-4b-it | 0.006% | 0.007% | 589 | * |
+| DeepSeek-V3.1 | 0.222% | **0.220%** | 124 | Mara-only usable |
+| DeepSeek-V3-0324 | 0.135% | 0.139% | 49 | 275/328 fidelity-excluded |
+| gpt-4o | 0.0015% | 0.0015% | 324 | ` they`+`'re` vs ` they're` |
+| gpt-4o-mini | 0.0013% | 0.0014% | 321 | newline-run seam |
+| Qwen3-235B | 0.003% | 0.003% | 233 | first nonzero for this model |
+| gpt-4.1 | 0.000% | 0.000% | 326 | 0/108,584 |
+| gpt-4.1-mini | 0.000% | 0.000% | 325 | 0/98,342 |
+
+<sub>* Judge sidecars for these files retain 58–178 ungraded lines (an
+early judge-parser bug rejected verdicts with trailing commentary; fixed
+in `phase2_judge.py`, but the re-grade was interrupted when the Anthropic
+workspace hit its monthly usage cap — resumes 2026-10-01). Ungraded lines
+are excluded from the compliant subset (conservative); API files carry
+≤8 holes each. gpt2/Llama-3.2-1B/Qwen2.5/gemma-2b-it are fully re-graded
+with the fixed parser.</sub>
+
+**Pre-registered prediction status.**
+
+- **P1 (all 2024+ instruct models ≤0.1% compliant-conditioned): partially
+  refuted, by DeepSeek.** Every other instruct model lands ≤0.03%;
+  DeepSeek-V3.1 sits at 0.220% *within* fully-compliant coherent English
+  (0.139% for V3-0324) — punctuation+newline seams in competent text. The
+  cross-model spread does shrink under conditioning (raw spans 1.15%→0;
+  compliant spans 0.22%→0).
+- **P2 (gpt2 near-zero full compliance, drops from the compliant
+  headline): confirmed.** 0 of 646 scaffolded generations judged full;
+  its 1.15% raw rate is entirely incoherent-output tokenization.
+- **P3 (raw ≥ compliant wherever they differ): confirmed within noise.**
+  Largest drops: Llama-3.2-1B 0.211%→0.029% (7×), Llama-3.1-8B
+  0.042%→0.014%, Qwen2.5 0.071%→0.015%. The two tiny reversals
+  (gemma-3-4b +0.001pp, V3-0324 +0.004pp) are denominator noise on
+  unchanged event counts.
+- **P4 (DeepSeek ≥0.1% on compliant English): confirmed** (0.220% /
+  0.139%).
+
+Reading notes: the v1 pooled survey's cross-model spread was substantially
+a compliance/coherence artifact — conditioning collapses the small-model
+rates by 3–7× — but two real phenomena survive it: DeepSeek's seams
+(~150× the gpt-4o line, in-distribution), and a small nonzero floor at
+the frontier (gpt-4o's contraction split, Qwen3-235B's 4 events; both
+models' previous zeros resolved to nonzero at larger n, which also rules
+out provider-side canonicalization for them). OpenRouter fidelity
+exclusions worsened vs the pinned run (CoreWeave 189/328 and GMICloud
+275/328 bytes-content mismatches), so DeepSeek usable samples remain
+provider-skewed; weights-in-hand re-tests stay the top follow-up. Judge
+spend ~$7 (batches); A100-80GB pod ~5h ≈ $9; API generation ~$8.
