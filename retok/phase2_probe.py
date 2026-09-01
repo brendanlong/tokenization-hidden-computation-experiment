@@ -240,6 +240,14 @@ def probe(
                 text = prompt
             enc = tokenizer(text, return_tensors="pt").to(device)
             prompt_len = enc.input_ids.shape[1]
+            # Clamp to the model's context window (gpt2: 1024): prompt +
+            # generation must fit, or position-embedding lookups go out of
+            # range and CUDA asserts. Effective cap is recorded implicitly in
+            # each record's generated length.
+            max_pos = getattr(model.config, "max_position_embeddings", None)
+            eff_max_new = max_new_tokens
+            if max_pos is not None:
+                eff_max_new = max(1, min(max_new_tokens, max_pos - prompt_len - 1))
             # Sampling params must be pinned EXPLICITLY: HF inherits anything
             # unset from the model repo's generation_config.json, and those
             # differ per model (Qwen2.5 ships top_k=20, top_p=0.8,
@@ -254,7 +262,7 @@ def probe(
             if temperature == 0.0:
                 out = model.generate(
                     **enc,
-                    max_new_tokens=max_new_tokens,
+                    max_new_tokens=eff_max_new,
                     do_sample=False,
                     num_return_sequences=1,
                     pad_token_id=tokenizer.eos_token_id,
@@ -262,7 +270,7 @@ def probe(
             else:
                 out = model.generate(
                     **enc,
-                    max_new_tokens=max_new_tokens,
+                    max_new_tokens=eff_max_new,
                     do_sample=True,
                     temperature=temperature,
                     top_k=0,
