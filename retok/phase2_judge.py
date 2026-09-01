@@ -124,7 +124,12 @@ def _parse_verdict(message: dict) -> dict:
     raw = message["content"][0]["text"].strip()
     if raw.startswith("```"):
         raw = raw.strip("`").removeprefix("json").strip()
-    verdict = json.loads(raw)
+    # Haiku sometimes appends commentary after the JSON object; take the
+    # first object and ignore trailing text rather than failing the line.
+    start = raw.find("{")
+    if start < 0:
+        raise ValueError(f"no JSON object: {raw[:80]}")
+    verdict, _ = json.JSONDecoder().raw_decode(raw[start:])
     if verdict.get("followed") not in ("full", "partial", "no"):
         raise ValueError(f"bad verdict: {raw[:100]}")
     return {
