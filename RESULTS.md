@@ -1451,27 +1451,29 @@ and the boundary join in the section below for OpenRouter files.
 | Llama-3.2-1B | 0.211% | 0.029% | 153 | |
 | Qwen2.5-1.5B | 0.071% | 0.015% | 155 | |
 | gemma-2b-it | 0.047% | 0.030% | 249 | |
-| Llama-3.1-8B | 0.042% | 0.014% | 524 | * |
-| Llama-3.2-3B | 0.039% | 0.014% | 452 | * |
-| gpt-oss-20b | 0.030% | 0.027% | 483 | *; bf16-dequantized |
-| gemma-2-2b (base) | 0.026% | 0.000% | 18 | *; base model, 3% compliance |
-| Llama-2-7b-chat | 0.010% | 0.010% | 504 | * |
-| gemma-3-4b-it | 0.006% | 0.007% | 589 | * |
+| Llama-3.1-8B | 0.042% | 0.013% | 524 | |
+| Llama-3.2-3B | 0.039% | 0.014% | 454 | |
+| gpt-oss-20b | 0.030% | 0.028% | 489 | bf16-dequantized |
+| gemma-2-2b (base) | 0.026% | 0.000% | 20 | base model, 3% compliance |
+| Llama-2-7b-chat | 0.010% | 0.010% | 499 | |
+| gemma-3-4b-it | 0.006% | 0.007% | 592 | |
 | DeepSeek-V3.1 | 0.222% | **0.220%** | 124 | Mara-only usable |
-| DeepSeek-V3-0324 | 0.135% | 0.139% | 49 | 275/328 fidelity-excluded |
-| gpt-4o | 0.0015% | 0.0015% | 324 | ` they`+`'re` vs ` they're` |
+| DeepSeek-V3-0324 | 0.135% | 0.136% | 52 | 275/328 fidelity-excluded |
+| gpt-4o | 0.0015% | 0.0015% | 323 | ` they`+`'re` vs ` they're` |
 | gpt-4o-mini | 0.0013% | 0.0014% | 321 | newline-run seam |
 | Qwen3-235B | 0.003% | 0.003% | 233 | first nonzero for this model |
 | gpt-4.1 | 0.000% | 0.000% | 326 | 0/108,584 |
 | gpt-4.1-mini | 0.000% | 0.000% | 325 | 0/98,342 |
 
-<sub>* Judge sidecars for these files retain 58–178 ungraded lines (an
-early judge-parser bug rejected verdicts with trailing commentary; fixed
-in `phase2_judge.py`, but the re-grade was interrupted when the Anthropic
-workspace hit its monthly usage cap — resumes 2026-10-01). Ungraded lines
-are excluded from the compliant subset (conservative); API files carry
-≤8 holes each. gpt2/Llama-3.2-1B/Qwen2.5/gemma-2b-it are fully re-graded
-with the fixed parser.</sub>
+<sub>Grading completed 2026-08-31 (same day): an early judge-parser bug
+rejected verdicts carrying trailing commentary, and the re-grade paused
+on a workspace usage cap before the limit was raised; the finished pass
+covers every line (8,280 verdicts, 0 errors). Relative to the interim
+table first recorded here, completing the grading moved no compliant
+rate by more than 0.003pp (cells above updated in place, dated note in
+lieu of strikethrough: gpt-oss 0.027→0.028, Llama-3.1-8B 0.014→0.013,
+V3-0324 0.139→0.136; several n grew slightly). Prediction statuses are
+unchanged.</sub>
 
 **Pre-registered prediction status.**
 
