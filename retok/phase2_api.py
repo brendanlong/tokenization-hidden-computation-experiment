@@ -91,14 +91,32 @@ def measure(
     max_tokens: int,
     jsonl_out: Path | None,
     top_p: float | None = None,
+    prompt_set: str = "default",
 ) -> None:
+    if prompt_set == "english-v2":
+        from retok.phase2_english import ENGLISH_PROMPTS
+
+        prompt_dict = ENGLISH_PROMPTS
+    else:
+        prompt_dict = PROMPTS
     enc = tiktoken.encoding_for_model(model)
     agg: dict[str, list[int]] = defaultdict(lambda: [0, 0, 0, 0])
     fidelity_failures = 0
     records: list[dict[str, object]] = []
+    sink = None
+    if jsonl_out:
+        jsonl_out.parent.mkdir(parents=True, exist_ok=True)
+        sink = jsonl_out.open("w")
+
+    def emit(rec: dict) -> None:
+        records.append(rec)
+        if sink:
+            sink.write(json.dumps(rec) + "\n")
+            sink.flush()
+
     examples: list[str] = []
 
-    for domain, prompts in PROMPTS.items():
+    for domain, prompts in prompt_dict.items():
         for prompt in prompts:
             resp = _chat(model, prompt, n_samples, temperature, max_tokens, top_p)
             for choice in resp["choices"]:
@@ -147,13 +165,14 @@ def measure(
                 a[1] += 1
                 a[2] += bad
                 a[3] += len(ids)
-                records.append(
+                emit(
                     {
                         "model": model,
                         "domain": domain,
                         "prompt": prompt,
                         "temperature": temperature,
                         "top_p": top_p,
+                        "prompt_set": prompt_set,
                         "generated_ids": ids,
                         "canonical_ids": canon,
                         "text": content,
@@ -162,7 +181,9 @@ def measure(
                     }
                 )
 
-    print(f"\n===== API MEASUREMENT: {model} (temp={temperature}) =====")
+    if sink:
+        sink.close()
+    print(f"\n===== API MEASUREMENT: {model} (temp={temperature}) =====", flush=True)
     print(f"fidelity failures: {fidelity_failures} (bytes/token mismatches)")
     print(f"{'domain':<24}{'non-canon':>12}{'per-gen':>9}{'per-token':>11}")
     for domain in sorted(agg):
@@ -177,11 +198,7 @@ def measure(
     for e in examples:
         print(f"    {e}")
     if jsonl_out:
-        jsonl_out.parent.mkdir(parents=True, exist_ok=True)
-        with jsonl_out.open("w") as f:
-            for r in records:
-                f.write(json.dumps(r) + "\n")
-        print(f"wrote {len(records)} records to {jsonl_out}")
+        print(f"wrote {len(records)} records to {jsonl_out} (incrementally)")
 
 
 def main() -> None:
@@ -197,6 +214,7 @@ def main() -> None:
         help="send top_p explicitly (omitted from the request when unset)",
     )
     p.add_argument("--out-dir", default="data/retok/api")
+    p.add_argument("--prompt-set", choices=["default", "english-v2"], default="default")
     a = p.parse_args()
     for model in a.models:
         measure(
@@ -206,6 +224,7 @@ def main() -> None:
             a.max_tokens,
             Path(a.out_dir) / f"{model}.jsonl",
             top_p=a.top_p,
+            prompt_set=a.prompt_set,
         )
 
 

@@ -56,6 +56,10 @@ select = [
 ]
 ignore = []
 
+[tool.ruff.lint.per-file-ignores]
+# Prompt text is data; keeping each prompt on one line beats wrapping it.
+"retok/phase2_english.py" = ["E501"]
+
 [tool.ruff.lint.isort]
 known-first-party = ["common", "retok", "retok_rl"]
 

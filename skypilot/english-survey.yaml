@@ -1,0 +1,82 @@
+# English-only v2 survey: all open models, sequentially, on ONE node so the
+# RunPod startup + env-setup overhead is paid once.
+#
+#   sky launch skypilot/english-survey.yaml -c retok-eng --infra runpod \
+#       --gpus A100-80GB:1 --down -y --secret HF_TOKEN=...
+#
+# One A100-80GB fits every model here (gpt-oss-20b bf16 ~44 GB is the
+# biggest). Results land in out/english_v2/ on the node and are echoed to the
+# log as a gzip+base64 block as a backup extraction path (same escape hatch
+# as train-retok-rl.yaml; recover with scripts/extract_rollouts_from_log.sh).
+#
+# The judge pass (phase2_judge) runs LOCALLY afterwards — it needs no GPU and
+# keeping the Anthropic key off the pod is one less secret to leak.
+
+name: retok-english-survey
+
+resources:
+  accelerators: {A100-80GB:1}
+  disk_size: 150
+
+workdir: .
+
+envs:
+  HF_TOKEN: ""
+  # Space-separated HF model ids, in run order. Small-to-large so partial
+  # results survive an interruption of the big ones.
+  MODELS: >-
+    gpt2
+    meta-llama/Llama-3.2-1B-Instruct
+    Qwen/Qwen2.5-1.5B-Instruct
+    google/gemma-2b-it
+    google/gemma-2-2b
+    meta-llama/Llama-3.2-3B-Instruct
+    google/gemma-3-4b-it
+    meta-llama/Llama-2-7b-chat-hf
+    meta-llama/Llama-3.1-8B-Instruct
+    openai/gpt-oss-20b
+  N_SAMPLES: "8"
+  MAX_NEW_TOKENS: "1000"
+  SEED: "31"
+
+setup: |
+  pip install uv
+  uv sync
+
+run: |
+  set -euo pipefail
+  export HF_HUB_ENABLE_HF_TRANSFER=0
+  nvidia-smi
+  if ! uv run python -c 'import sys, torch; sys.exit(0 if torch.cuda.is_available() else 1)'; then
+    echo ">>> torch cannot see CUDA; installing the cu128 build"
+    (uv pip list | grep -E '^(nvidia|cuda-|torch|triton)' || true) | awk '{print $1}' | xargs -r uv pip uninstall
+    uv pip install torch --index-url https://download.pytorch.org/whl/cu128
+    export UV_NO_SYNC=1
+    uv run python -c 'import torch; assert torch.cuda.is_available(), "CUDA still unavailable after cu128 swap"'
+  fi
+  mkdir -p out/english_v2
+  for MODEL in $MODELS; do
+    SAFE=$(echo "$MODEL" | tr '/' '_')
+    echo ">>> $MODEL"
+    # --scaffold only affects models with no chat template (gpt2, base gemma);
+    # chat models ignore it, so passing it uniformly is safe and recorded.
+    uv run python -m retok.phase2_probe \
+      --model "$MODEL" \
+      --prompt-set english-v2 \
+      --scaffold \
+      --n-samples "$N_SAMPLES" \
+      --max-new-tokens "$MAX_NEW_TOKENS" \
+      --temperature 1.0 \
+      --seed "$SEED" \
+      --dtype auto \
+      --jsonl-out "out/english_v2/${SAFE}.jsonl" \
+      || { echo ">>> FAILED $MODEL (continuing with remaining models)"; continue; }
+    # Escape-hatch copy of each artifact into the log, ANSI-safe on extraction.
+    if [ -f "out/english_v2/${SAFE}.jsonl" ]; then
+      echo ">>> ROLLOUTS_B64_BEGIN ${SAFE}.jsonl"
+      gzip -c "out/english_v2/${SAFE}.jsonl" | base64 -w 120
+      echo ">>> ROLLOUTS_B64_END ${SAFE}.jsonl"
+    fi
+  done
+  echo ">>> all models complete"
+  ls -la out/english_v2/
