@@ -51,8 +51,9 @@ separated; overclaiming has required public retractions here twice.
   `skypilot/train-retok-rl.yaml` comments). Artifacts: rsync via the
   cluster ssh config, with the gzip+base64 log escape hatch
   (`scripts/extract_rollouts_from_log.sh`) as backup.
-- Keep exploratory GPU spend ~$1–5 per run; ask before anything ≥$10,
-  stating the price.
+- Ask before renting a GPU (RunPod or any other paid remote GPU), stating the
+  GPU and estimated cost, unless Brendan already told you to rent one earlier
+  in the conversation.
 
 ## Publishing
 
